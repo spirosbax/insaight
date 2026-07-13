@@ -14,6 +14,14 @@ Tool calling order the agent should follow:
  10. list_comments(post_url|post_urn, ...) → query stored comments for a post
  11. get_stats()                        → DB-wide overview
 
+Outreach memory loop (learns the user's voice + what gets replies):
+ 12. log_outreach(...)                  → record a sent message (also flags prior contact)
+ 13. record_outcome(...)                → record replied/ghosted/etc.; flags when reflection is due
+ 14. list_outreach(...)                 → query the outreach ledger
+ 15. get_outreach_stats()               → reply-rate breakdown by hook/variant/channel + reflection state
+ 16. get_memory()                       → read distilled style + playbook memory
+ 17. update_memory(kind, content, ...)  → rewrite a memory file (reflect skill, after user approval)
+
 This staged approach avoids dumping thousands of tokens of post content up front.
 """
 
@@ -27,11 +35,16 @@ from pathlib import Path
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from . import db, models, people as people_module, scraper, comments as comments_module
+from . import memory as memory_module
 
 # Load APIFY_API_TOKEN (and any other vars) from the project .env
 load_dotenv(Path(__file__).parent.parent / ".env")
 
 mcp = FastMCP("insaight")
+
+# After this many recorded outcomes, record_outcome() flags that a reflection
+# run is due (the insaight-reflect skill proposes memory updates with evidence).
+REFLECT_EVERY = int(os.environ.get("REFLECT_EVERY", "10"))
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -817,6 +830,305 @@ def list_comments(
         })
 
     return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# Outreach memory loop
+# ---------------------------------------------------------------------------
+
+def _reflection_state(conn) -> dict:
+    since = int(db.get_meta(conn, "outcomes_since_reflection", "0"))
+    return {
+        "outcomes_since_last_reflection": since,
+        "reflect_every": REFLECT_EVERY,
+        "reflection_due": since >= REFLECT_EVERY,
+        "last_reflection_at": db.get_meta(conn, "last_reflection_at"),
+    }
+
+
+def _slim_outreach_row(row: dict, full: bool = False) -> dict:
+    entry = {
+        "id": row["id"],
+        "target_name": row["target_name"],
+        "target_url": row["target_url"],
+        "company": row["company"],
+        "channel": row["channel"],
+        "variant": row["variant"],
+        "hook_type": row["hook_type"],
+        "sent_at": row["sent_at"],
+        "outcome": row["outcome"],
+        "outcome_at": row["outcome_at"],
+        "reply_snippet": row["reply_snippet"],
+        "notes": row["notes"],
+    }
+    entry["message" if full else "message_snippet"] = (
+        row["message"] if full else _snippet(row["message"])
+    )
+    return entry
+
+
+@mcp.tool()
+def log_outreach(
+    target_url: str,
+    message: str,
+    target_name: str = "",
+    company: str = "",
+    channel: str = "dm",
+    variant: str = "",
+    hook_type: str = "",
+    notes: str = "",
+) -> str:
+    """
+    Record an outreach message the user actually SENT. Call this when the user
+    says they sent a message ("I sent it", "log this outreach").
+
+    The stored ledger replaces a manual sent-log: it powers prior-contact checks,
+    reply-rate stats, and the reflection loop that learns what works. The
+    response includes any prior contact with the same target — surface that
+    to the user if present.
+
+    Args:
+        target_url:  LinkedIn profile URL (or email address) of the recipient.
+        message:     The exact message text that was sent.
+        target_name: Recipient's name (optional but recommended).
+        company:     Recipient's company (optional).
+        channel:     "dm" | "email" | "other" (default "dm").
+        variant:     Which draft variant was sent: "warm" | "direct" | "follow-up" | free text.
+        hook_type:   Opening hook used: "question" | "statement" | "story" | "stat"
+                     | "commonality" | free text. Used for reply-rate breakdowns.
+        notes:       Anything worth remembering about this send (optional).
+    """
+    if not target_url.strip() or not message.strip():
+        return "Both target_url and message are required."
+
+    conn = db.get_connection()
+    db.init_db(conn)
+
+    prior = db.get_outreach(conn, target=target_url.strip(), limit=10)
+    outreach_id = db.insert_outreach(
+        conn,
+        target_url=target_url.strip(),
+        message=message,
+        sent_at=datetime.now().isoformat(),
+        target_name=target_name,
+        company=company,
+        channel=channel,
+        variant=variant,
+        hook_type=hook_type,
+        notes=notes,
+    )
+    conn.close()
+
+    result = {
+        "outreach_id": outreach_id,
+        "logged": True,
+        "prior_contact": [
+            {"id": p["id"], "sent_at": p["sent_at"], "outcome": p["outcome"]}
+            for p in prior
+        ],
+        "message": (
+            f"Logged outreach #{outreach_id} to {target_name or target_url}. "
+            "When you hear back (or give up), call record_outcome()."
+        ),
+    }
+    if prior:
+        result["message"] += (
+            f" ⚠️ {len(prior)} prior message(s) to this target — "
+            "this looks like a follow-up."
+        )
+    return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
+def record_outcome(
+    outreach_id: int = 0,
+    target_url: str = "",
+    outcome: str = "replied",
+    reply_snippet: str = "",
+    notes: str = "",
+) -> str:
+    """
+    Record what happened to a sent outreach message. Call when the user says
+    the target replied, booked a meeting, or went quiet.
+
+    Identify the record by outreach_id, OR by target_url (resolves to that
+    target's most recent pending message).
+
+    The response includes reflection_due — when true, tell the user that enough
+    outcomes have accumulated and offer to run the insaight-reflect skill.
+
+    Args:
+        outreach_id:   Row id returned by log_outreach() (preferred).
+        target_url:    Alternative lookup: the target's URL/email.
+        outcome:       "replied" | "positive" | "meeting" | "ghosted".
+                       (positive = reply with clear interest; meeting = call booked)
+        reply_snippet: A short quote from the reply — evidence for reflection.
+        notes:         Optional context (e.g. "replied after the follow-up nudge").
+    """
+    if outcome not in db.VALID_OUTCOMES or outcome == "pending":
+        valid = [o for o in db.VALID_OUTCOMES if o != "pending"]
+        return f"Invalid outcome '{outcome}'. Use one of: {', '.join(valid)}."
+
+    conn = db.get_connection()
+    db.init_db(conn)
+
+    if not outreach_id and target_url:
+        rows = db.get_outreach(conn, outcome="pending", target=target_url.strip(), limit=1)
+        if not rows:
+            rows = db.get_outreach(conn, target=target_url.strip(), limit=1)
+        if rows:
+            outreach_id = rows[0]["id"]
+
+    if not outreach_id:
+        conn.close()
+        return (
+            "No matching outreach record. Provide outreach_id, or a target_url "
+            "that was previously logged with log_outreach(). "
+            "Call list_outreach() to browse the ledger."
+        )
+
+    updated = db.update_outreach_outcome(
+        conn, outreach_id, outcome,
+        outcome_at=datetime.now().isoformat(),
+        reply_snippet=reply_snippet, notes=notes,
+    )
+    if not updated:
+        conn.close()
+        return f"No outreach record with id {outreach_id}. Call list_outreach() to browse."
+
+    since = int(db.get_meta(conn, "outcomes_since_reflection", "0")) + 1
+    db.set_meta(conn, "outcomes_since_reflection", str(since))
+    state = _reflection_state(conn)
+    conn.close()
+
+    result = {
+        "outreach_id": outreach_id,
+        "outcome": outcome,
+        **state,
+        "message": f"Recorded '{outcome}' for outreach #{outreach_id}.",
+    }
+    if state["reflection_due"]:
+        result["message"] += (
+            f" 🔁 {since} outcomes since the last reflection (threshold "
+            f"{REFLECT_EVERY}) — offer to run insaight-reflect to update "
+            "the style/playbook memory."
+        )
+    return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
+def list_outreach(
+    outcome: str = "",
+    target: str = "",
+    limit: int = 30,
+    full: bool = False,
+) -> str:
+    """
+    Query the outreach ledger, newest first. Use for prior-contact checks
+    ("have I messaged this person?"), reviewing pending sends, or pulling
+    recent messages for reflection.
+
+    Args:
+        outcome: Filter: "pending" | "replied" | "positive" | "meeting" | "ghosted".
+                 Empty = all.
+        target:  Substring match on target URL, name, or company.
+        limit:   Max records (default 30, max 100).
+        full:    If True, include full message text (use for reflection);
+                 default False returns a 150-char snippet.
+    """
+    limit = min(limit, 100)
+    conn = db.get_connection()
+    db.init_db(conn)
+    rows = db.get_outreach(conn, outcome=outcome, target=target, limit=limit)
+    conn.close()
+
+    if not rows:
+        return "No outreach records matched. Log sends with log_outreach()."
+    return json.dumps(
+        [_slim_outreach_row(dict(r), full=full) for r in rows],
+        ensure_ascii=False, indent=2,
+    )
+
+
+@mcp.tool()
+def get_outreach_stats() -> str:
+    """
+    Reply-rate breakdown of the outreach ledger: totals plus per-hook_type,
+    per-variant, and per-channel rates (pending sends excluded from rates),
+    and the current reflection state.
+
+    This is the evidence source for the insaight-reflect skill — cite these
+    counts (e.g. "question hooks: 4/9 replied") in any proposed memory update.
+    """
+    conn = db.get_connection()
+    db.init_db(conn)
+    stats = db.get_outreach_breakdown(conn)
+    stats["reflection"] = _reflection_state(conn)
+    conn.close()
+    return json.dumps(stats, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
+def get_memory() -> str:
+    """
+    Read the distilled outreach memory: the style guide and the strategy
+    playbook. The draft-outreach and draft-post skills should read THIS
+    (a few hundred tokens) instead of re-deriving style from raw history.
+
+    Returns both files plus whether they've been learned yet and the
+    reflection state. If not yet learned, fall back to reading recent
+    outreach (list_outreach) or the Notion log, and suggest running
+    insaight-reflect once a few outcomes are logged.
+    """
+    conn = db.get_connection()
+    db.init_db(conn)
+    state = _reflection_state(conn)
+    conn.close()
+    return json.dumps({
+        "style": memory_module.read_memory("style"),
+        "style_learned": memory_module.is_learned("style"),
+        "playbook": memory_module.read_memory("playbook"),
+        "playbook_learned": memory_module.is_learned("playbook"),
+        "reflection": state,
+    }, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
+def update_memory(
+    kind: str,
+    content: str,
+    mark_reflection_done: bool = False,
+) -> str:
+    """
+    Rewrite a memory file. ONLY call this after the user has approved the
+    proposed content (the insaight-reflect skill shows a draft first —
+    never overwrite memory silently).
+
+    Args:
+        kind:    "style" or "playbook".
+        content: The full new Markdown content of the file (not a diff).
+        mark_reflection_done: Set True on the LAST update of a reflection run —
+                 resets the outcomes-since-reflection counter.
+    """
+    try:
+        path = memory_module.write_memory(kind, content)
+    except ValueError as e:
+        return str(e)
+
+    conn = db.get_connection()
+    db.init_db(conn)
+    if mark_reflection_done:
+        db.set_meta(conn, "outcomes_since_reflection", "0")
+        db.set_meta(conn, "last_reflection_at", datetime.now().isoformat())
+    state = _reflection_state(conn)
+    conn.close()
+
+    return json.dumps({
+        "updated": kind,
+        "path": str(path),
+        "chars": len(content),
+        **state,
+    }, ensure_ascii=False, indent=2)
 
 
 if __name__ == "__main__":

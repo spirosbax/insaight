@@ -39,6 +39,12 @@ All tools must be loaded first via `tool_search(query="insaight")`.
 | `insaight:scrape_person_profile` | Enrich ONE person with full profile (experience, education, skills, etc.) | `url`, `with_email`, `company_url` |
 | `insaight:scrape_post_comments` | Scrape comments on a LinkedIn post (with replies + author info) | `post_url`, `max_items`, `include_replies`, `profile_mode` |
 | `insaight:list_comments` | List stored comments for a post, ranked by likes | `post_urn` or `post_url`, `limit`, `min_likes`, `include_replies` |
+| `insaight:log_outreach` | Record a SENT message in the ledger (flags prior contact) | `target_url`, `message`, `target_name`, `channel`, `variant`, `hook_type` |
+| `insaight:record_outcome` | Record replied/positive/meeting/ghosted; flags when reflection is due | `outreach_id` or `target_url`, `outcome`, `reply_snippet` |
+| `insaight:list_outreach` | Query the outreach ledger (prior-contact checks, pending review) | `outcome`, `target`, `limit`, `full` |
+| `insaight:get_outreach_stats` | Reply-rate breakdown by hook/variant/channel + reflection state | — |
+| `insaight:get_memory` | Read distilled style + playbook memory (draft skills read THIS) | — |
+| `insaight:update_memory` | Rewrite a memory file — only after user approval | `kind`, `content`, `mark_reflection_done` |
 
 ### Efficient reading pattern
 
@@ -83,6 +89,24 @@ free/instant — always try it first.
 - 10–40 likes = normal
 - 40+ likes = high signal post, read in full
 
+### Outreach memory loop
+
+The ledger + memory system replaces re-reading a raw sent-log every session:
+
+1. **Log every send** (`log_outreach`) with the exact sent text + `variant` + `hook_type`.
+2. **Record every outcome** (`record_outcome`) when the user reports a reply,
+   meeting, or gives up (`ghosted`). The user decides when something is ghosted.
+3. After `REFLECT_EVERY` outcomes (env var, default 10), `record_outcome`
+   returns `reflection_due: true` → offer the **insaight-reflect** skill.
+4. Reflection proposes updates to `data/memory/style.md` (voice) and
+   `data/memory/playbook.md` (strategies with evidence counts) — the user
+   approves before `update_memory` is called. Never overwrite memory silently.
+5. **draft-outreach reads `get_memory()`**, not raw history — constant token
+   cost regardless of ledger size.
+
+Playbook discipline: every claim carries its evidence ("question hooks: 4/9
+replied"); below n=10 a pattern is a hypothesis, not a rule.
+
 ### Tips
 
 - **Personal profiles vs company pages**: Personal profiles (founders, CEOs) often
@@ -113,13 +137,15 @@ Parent page containing one sub-page per researched person/company.
   notion:search(query="[NOTION_RESEARCH_PAGE]")
   ```
 
-### 2. [NOTION_OUTREACH_LOG] (READ-ONLY — source of truth for outreach style)
+### 2. [NOTION_OUTREACH_LOG] (READ-ONLY — legacy fallback)
 
-A single page where the user manually logs every cold message they've sent.
-This is the user's voice archive and the ledger of who has already been messaged.
+**The outreach ledger + memory system (see "Outreach memory loop") has replaced
+this page.** Sends live in the SQLite `outreach` table; style lives in
+`data/memory/style.md`. Only fall back to this Notion page when `get_memory()`
+reports nothing learned AND `list_outreach()` is empty (fresh install with
+pre-existing Notion history).
 
 - **Location**: `[NOTION_WORKSPACE]` → `[NOTION_RESEARCH_PAGE]` → `[NOTION_OUTREACH_LOG]`
-- **Used by**: draft-outreach (mandatory style reference), research skills (check if target has already been messaged)
 - **NEVER write to this page.** The user maintains it manually.
 - **Find it**:
   ```
@@ -130,16 +156,17 @@ This is the user's voice archive and the ledger of who has already been messaged
 
 | Skill | Before run | After run |
 |-------|-----------|-----------|
-| research-person / research-company | Check for existing research page (load as context). Check [NOTION_OUTREACH_LOG] for prior messages to this target (warn user). | **Auto-save** brief to [NOTION_RESEARCH_PAGE]. No prompt. |
-| research-post | Check for existing research page (load as context). Cross-check named commenters against [NOTION_OUTREACH_LOG]. | **Auto-save** brief to [NOTION_RESEARCH_PAGE]. No prompt. |
-| draft-outreach | Fetch [NOTION_OUTREACH_LOG]. Extract style patterns. Warn if target already in [NOTION_OUTREACH_LOG]. | Do not write. User copies the draft and logs it manually. |
+| research-person / research-company | Check for existing research page (load as context). Check `list_outreach(target=...)` for prior messages to this target (warn user). | **Auto-save** brief to [NOTION_RESEARCH_PAGE]. No prompt. |
+| research-post | Check for existing research page (load as context). Cross-check named commenters via `list_outreach`. | **Auto-save** brief to [NOTION_RESEARCH_PAGE]. No prompt. |
+| draft-outreach | `get_memory()` for style + playbook. `list_outreach(target=...)` for prior contact. | Do not auto-save. When the user says they SENT it → log via track-outreach. |
+| track-outreach | — | `log_outreach` on send; `record_outcome` on reply/ghost. Offer insaight-reflect when `reflection_due`. |
+| reflect | `get_outreach_stats` + `list_outreach(full=true)` + `get_memory`. | Propose updates with evidence → on approval `update_memory` (last call: `mark_reflection_done=true`). |
 | save-notion | — | Internal helper the research skills invoke. Also exposed as explicit "save to Notion" command. |
 
 ### Session caching
 
-Fetch [NOTION_OUTREACH_LOG] **once per conversation**. It's the same content every time and
-can be large. Subsequent references in the same session should reuse what was
-fetched, not re-query.
+Fetch memory (`get_memory`) **once per conversation** and reuse it. Same for
+any legacy Notion pages you had to load — never re-fetch on iteration.
 
 ### Notion MCP loading
 

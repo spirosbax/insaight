@@ -1,7 +1,14 @@
+import os
 import sqlite3
 from pathlib import Path
 
 DEFAULT_DB_PATH = Path(__file__).parent.parent / "data" / "posts.db"
+
+
+def _default_db_path() -> Path:
+    """INSAIGHT_DB_PATH env var overrides the default data/posts.db location."""
+    env = os.environ.get("INSAIGHT_DB_PATH", "")
+    return Path(env) if env else DEFAULT_DB_PATH
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS posts (
@@ -82,6 +89,30 @@ CREATE TABLE IF NOT EXISTS comments (
 
 CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_urn);
 CREATE INDEX IF NOT EXISTS idx_comments_author ON comments(author_profile_url);
+
+CREATE TABLE IF NOT EXISTS outreach (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    target_url TEXT NOT NULL,
+    target_name TEXT,
+    company TEXT,
+    channel TEXT DEFAULT 'dm',
+    variant TEXT,
+    hook_type TEXT,
+    message TEXT NOT NULL,
+    sent_at TEXT NOT NULL,
+    outcome TEXT DEFAULT 'pending',
+    reply_snippet TEXT,
+    outcome_at TEXT,
+    notes TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_outreach_target ON outreach(target_url);
+CREATE INDEX IF NOT EXISTS idx_outreach_outcome ON outreach(outcome);
+
+CREATE TABLE IF NOT EXISTS meta (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
 """
 
 # Columns added after the initial release. Applied idempotently on every connection
@@ -111,7 +142,7 @@ def _migrate_people_columns(conn):
 
 
 def get_connection(db_path=None):
-    db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
+    db_path = Path(db_path) if db_path else _default_db_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
@@ -355,6 +386,141 @@ def get_comments(conn, post_urn: str, limit: int = 200) -> list:
            LIMIT ?""",
         (post_urn, limit),
     ).fetchall()
+
+
+# ---------------------------------------------------------------------------
+# Outreach log + meta
+# ---------------------------------------------------------------------------
+
+# Outcomes that count as "got a reply" for rate calculations.
+REPLIED_OUTCOMES = ("replied", "positive", "meeting")
+VALID_OUTCOMES = ("pending", "replied", "positive", "meeting", "ghosted")
+
+
+def get_meta(conn, key: str, default: str | None = None) -> str | None:
+    row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else default
+
+
+def set_meta(conn, key: str, value: str) -> None:
+    conn.execute(
+        "INSERT INTO meta (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, value),
+    )
+    conn.commit()
+
+
+def insert_outreach(
+    conn,
+    target_url: str,
+    message: str,
+    sent_at: str,
+    target_name: str = "",
+    company: str = "",
+    channel: str = "dm",
+    variant: str = "",
+    hook_type: str = "",
+    notes: str = "",
+) -> int:
+    """Insert an outreach record, returns the new row id."""
+    cur = conn.execute(
+        """INSERT INTO outreach
+           (target_url, target_name, company, channel, variant, hook_type,
+            message, sent_at, outcome, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)""",
+        (target_url, target_name, company, channel, variant, hook_type,
+         message, sent_at, notes),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def update_outreach_outcome(
+    conn,
+    outreach_id: int,
+    outcome: str,
+    outcome_at: str,
+    reply_snippet: str = "",
+    notes: str = "",
+) -> bool:
+    """Set the outcome of an outreach record. Returns False if the id doesn't exist."""
+    cur = conn.execute(
+        """UPDATE outreach
+           SET outcome = ?, outcome_at = ?,
+               reply_snippet = CASE WHEN ? != '' THEN ? ELSE reply_snippet END,
+               notes = CASE WHEN ? != '' THEN ? ELSE notes END
+           WHERE id = ?""",
+        (outcome, outcome_at, reply_snippet, reply_snippet, notes, notes, outreach_id),
+    )
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def get_outreach(
+    conn,
+    outcome: str = "",
+    target: str = "",
+    limit: int = 30,
+) -> list:
+    """Query outreach records, newest first. target matches URL or name (substring)."""
+    clauses = ["1=1"]
+    params: list = []
+    if outcome:
+        clauses.append("outcome = ?")
+        params.append(outcome)
+    if target:
+        clauses.append("(target_url LIKE ? OR target_name LIKE ? OR company LIKE ?)")
+        params.extend([f"%{target}%"] * 3)
+    params.append(limit)
+    return conn.execute(
+        f"""SELECT * FROM outreach
+            WHERE {' AND '.join(clauses)}
+            ORDER BY sent_at DESC LIMIT ?""",
+        params,
+    ).fetchall()
+
+
+def get_outreach_breakdown(conn) -> dict:
+    """Reply-rate breakdown by hook_type, variant, and channel.
+
+    Only rows with a resolved outcome (not 'pending') enter the denominators,
+    so freshly-sent messages don't drag rates down before they had a chance
+    to be answered.
+    """
+    replied_case = (
+        "SUM(CASE WHEN outcome IN ({}) THEN 1 ELSE 0 END)".format(
+            ",".join(f"'{o}'" for o in REPLIED_OUTCOMES)
+        )
+    )
+    result: dict = {}
+    for dim in ("hook_type", "variant", "channel"):
+        rows = conn.execute(
+            f"""SELECT COALESCE(NULLIF({dim}, ''), 'unspecified') AS bucket,
+                       COUNT(*) AS n,
+                       {replied_case} AS replied
+                FROM outreach
+                WHERE outcome != 'pending'
+                GROUP BY bucket ORDER BY n DESC"""
+        ).fetchall()
+        result[dim] = [
+            {"bucket": r["bucket"], "n": r["n"], "replied": r["replied"],
+             "reply_rate": round(r["replied"] / r["n"], 2) if r["n"] else 0.0}
+            for r in rows
+        ]
+    totals = conn.execute(
+        f"""SELECT COUNT(*) AS total,
+                   SUM(CASE WHEN outcome = 'pending' THEN 1 ELSE 0 END) AS pending,
+                   SUM(CASE WHEN outcome != 'pending' THEN 1 ELSE 0 END) AS resolved,
+                   {replied_case} AS replied
+            FROM outreach"""
+    ).fetchone()
+    result["totals"] = dict(totals)
+    resolved = totals["resolved"] or 0
+    result["totals"]["reply_rate"] = (
+        round((totals["replied"] or 0) / resolved, 2) if resolved else 0.0
+    )
+    return result
 
 
 def get_commenters_for_account(conn, account_url: str, limit: int = 50) -> list:

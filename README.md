@@ -2,7 +2,7 @@
 
 Turn LinkedIn into a prospect intelligence engine. Research people, analyze companies, and draft personalized cold outreach — all from natural language.
 
-Insaight scrapes LinkedIn posts and employee profiles via [Apify](https://apify.com), stores them locally in SQLite, and exposes everything to Claude through a local [MCP server](https://modelcontextprotocol.io/). On top of the data layer sit six composable [Claude Code skills](https://docs.anthropic.com/en/docs/claude-code/skills) that turn raw LinkedIn data into structured intelligence briefs and ready-to-send outreach messages.
+Insaight scrapes LinkedIn posts and employee profiles via [Apify](https://apify.com), stores them locally in SQLite, and exposes everything to Claude through a local [MCP server](https://modelcontextprotocol.io/). On top of the data layer sit eight composable [Claude Code skills](https://docs.anthropic.com/en/docs/claude-code/skills) that turn raw LinkedIn data into structured intelligence briefs and ready-to-send outreach messages — and a **memory loop** that learns your voice and which outreach strategies actually get replies.
 
 ```
 "Research Acme Charging on LinkedIn"
@@ -14,6 +14,10 @@ Insaight scrapes LinkedIn posts and employee profiles via [Apify](https://apify.
 
 "Save to Notion"
   → persists everything under your configured Notion research page
+
+"I sent it" ... "She replied!"
+  → logged in the local ledger; after enough outcomes Insaight proposes
+    evidence-backed updates to its learned style guide + outreach playbook
 ```
 
 ## How it works
@@ -23,19 +27,19 @@ Insaight scrapes LinkedIn posts and employee profiles via [Apify](https://apify.
                     │              Claude Code / Desktop          │
                     │                                             │
                     │  skills/                                    │
-                    │    insaight-research-person.md               │
-                    │    insaight-research-company.md              │
-                    │    insaight-research-post.md                 │
-                    │    insaight-draft-outreach.md                │
-                    │    insaight-save-notion.md                   │
+                    │    research-person / research-company        │
+                    │    research-post / draft-post                │
+                    │    draft-outreach / track-outreach           │
+                    │    reflect / save-notion                     │
                     └──────────────┬──────────────────────────────┘
                                    │ MCP (natural language → tool calls)
                     ┌──────────────▼──────────────────────────────┐
-                    │          mcp_server.py (11 tools)           │
+                    │          mcp_server.py (17 tools)           │
                     └──────────────┬──────────────────────────────┘
                                    │
                     ┌──────────────▼──────────────────────────────┐
-                    │            SQLite (posts + people)          │
+                    │   SQLite (posts + people + outreach)        │
+                    │   data/memory/ (style.md + playbook.md)     │
                     └──────────────┬──────────────────────────────┘
                                    │
                     ┌──────────────▼──────────────────────────────┐
@@ -47,7 +51,7 @@ Insaight scrapes LinkedIn posts and employee profiles via [Apify](https://apify.
 
 ## Skills
 
-Insaight ships six composable skills that chain conversationally — each skill's output feeds the next.
+Insaight ships eight composable skills that chain conversationally — each skill's output feeds the next.
 
 | Skill | What it does | Trigger examples |
 |-------|-------------|------------------|
@@ -56,6 +60,8 @@ Insaight ships six composable skills that chain conversationally — each skill'
 | **research-post** | Mine a single post's comment thread for warm leads, decision-makers, and competitor mentions | "Who engaged with this post?", "Research this LinkedIn post" |
 | **draft-outreach** | Two variants (warm + direct) x two formats (LinkedIn DM + email) using intelligence from prior research | "Draft outreach to their CEO", "Write a cold email" |
 | **draft-post** | Write a LinkedIn post in your company's voice, using your past posts as the style reference (+ optional visual brief) | "Write a LinkedIn post about X", "Make a post from this article" |
+| **track-outreach** | Log sent messages and their outcomes in the local ledger | "I sent it", "She replied", "Mark as ghosted", "Meeting booked" |
+| **reflect** | Analyze outcomes, propose evidence-backed updates to your style + playbook memory (you approve before saving) | "Run a reflection", "What's working in my outreach?" |
 | **save-notion** | Persist the brief + outreach to Notion | "Save to Notion" |
 
 Skills are plain Markdown files with YAML frontmatter — easy to read, fork, and customize.
@@ -77,9 +83,36 @@ research person → draft outreach
 research company → read the prospect evaluation → decide whether to pursue
 ```
 
+## The memory loop — learning what works
+
+Instead of re-reading your entire sent-message history every session, Insaight
+distills it into two small memory files that drafting reads at constant cost:
+
+```
+draft → send → "I sent it"        → logged in SQLite (log_outreach)
+      → "she replied" / "ghosted" → outcome recorded (record_outcome)
+      → every N outcomes          → reflection proposed (insaight-reflect)
+      → you approve               → memory updated:
+                                      data/memory/style.md     (your voice)
+                                      data/memory/playbook.md  (what gets replies)
+```
+
+- **Outcomes are logged manually** — you tell Claude "he replied" or "mark as
+  ghosted". No inbox scraping.
+- **Reflection is evidence-based** — every playbook claim carries its counts
+  ("question hooks: 4/9 replied vs statement hooks: 1/8"). Below n=10 a pattern
+  is labeled a hypothesis, not a rule, so the loop doesn't overfit to noise.
+- **Nothing is saved silently** — reflection shows you the proposed memory
+  files and their evidence; you approve, edit, or reject.
+- The reflection threshold is configurable via `REFLECT_EVERY` in `.env`
+  (default 10 outcomes).
+
+The ledger also powers prior-contact warnings ("you messaged this person 3
+weeks ago — outcome: ghosted") whenever you research or draft.
+
 ## MCP Tools
 
-The MCP server exposes 11 tools to Claude. Skills orchestrate these tools, but you can also call them directly in conversation.
+The MCP server exposes 17 tools to Claude. Skills orchestrate these tools, but you can also call them directly in conversation.
 
 | Tool | Purpose |
 |------|---------|
@@ -94,6 +127,12 @@ The MCP server exposes 11 tools to Claude. Skills orchestrate these tools, but y
 | `scrape_post_comments` | Fetch a post's comment thread with author info (via Apify) |
 | `list_comments` | Query stored comments for a post, ranked by likes |
 | `get_stats` | Database overview: counts, date range, categories |
+| `log_outreach` | Record a sent message in the local ledger (flags prior contact) |
+| `record_outcome` | Record replied / positive / meeting / ghosted; flags when a reflection is due |
+| `list_outreach` | Query the ledger: prior-contact checks, pending sends, recent history |
+| `get_outreach_stats` | Reply-rate breakdown by hook type, variant, and channel |
+| `get_memory` | Read the learned style guide + strategy playbook |
+| `update_memory` | Rewrite a memory file (only after you approve a reflection proposal) |
 
 ### Why this two-step reading pattern?
 
@@ -120,6 +159,7 @@ cp .env.example .env
 Edit `.env` and add your tokens:
 - **`APIFY_API_TOKEN`** — get one at [apify.com](https://apify.com) (free tier available)
 - **`ANTHROPIC_API_KEY`** — only needed for post categorization (optional)
+- **`REFLECT_EVERY`** — outcomes between memory reflections (optional, default 10)
 
 ### 3. Connect to Claude
 
@@ -164,31 +204,17 @@ Edit the config block at the top of `CLAUDE.md` to match your Notion workspace a
 ```
 NOTION_WORKSPACE:     YourWorkspaceName
 NOTION_RESEARCH_PAGE: Prospect Research
-NOTION_OUTREACH_LOG:  Sent Log
+NOTION_OUTREACH_LOG:  Sent Log            # legacy/optional — see note
 COMPANY_NAME:         YourCompany         # used by draft-post
 COMPANY_LINKEDIN:     your-company-slug   # your LinkedIn company page slug
 ```
 
-Create the two pages in Notion if they don't exist yet:
+Create `NOTION_RESEARCH_PAGE` in Notion if it doesn't exist yet — a blank page
+where research briefs will be saved, one sub-page per person or company.
 
-- **`NOTION_RESEARCH_PAGE`** — a blank page where research briefs will be saved, one sub-page per person or company
-- **`NOTION_OUTREACH_LOG`** — a page where you manually log every cold message you send; the draft-outreach skill reads this to match your writing style
+**Shared team setup:** if you're using Insaight as a team, everyone points their `CLAUDE.md` at the same `NOTION_RESEARCH_PAGE` for a shared pool of research briefs. Note that the outreach ledger and learned memory are local per machine — each person learns their own voice.
 
-**Shared team setup:** if you're using Insaight as a team, everyone points their `CLAUDE.md` at the same pages:
-
-```
-NOTION_WORKSPACE:     <your shared workspace name>
-NOTION_RESEARCH_PAGE: Prospect Research
-NOTION_OUTREACH_LOG:  Sent Log
-```
-
-This gives everyone a shared pool of research briefs under `NOTION_RESEARCH_PAGE`.
-
-**Note on the outreach log:** `NOTION_OUTREACH_LOG` is used to learn your personal writing style when drafting cold messages. If it's a shared log, the style extraction will blend everyone's voice and drafts won't sound like any one person in particular. If that's a problem, give each person their own log and point their config at it:
-
-```
-NOTION_OUTREACH_LOG: Sent Log — Alice
-```
+**Note on `NOTION_OUTREACH_LOG` (legacy):** earlier versions learned your writing style by re-reading a manually-maintained Notion page of sent messages. The [memory loop](#the-memory-loop--learning-what-works) replaces this — style now lives in `data/memory/style.md`, learned from logged sends. The Notion page is only consulted as a fallback on a fresh install that has no logged history yet; if you're starting from scratch you don't need to create it.
 
 ## CLI
 
@@ -212,8 +238,9 @@ python -m src.cli export --format csv --output posts.csv
 
 ```
 src/
-  mcp_server.py    — FastMCP server: 8 tools for Claude
-  db.py            — SQLite schema + CRUD (posts + people tables)
+  mcp_server.py    — FastMCP server: 17 tools for Claude
+  db.py            — SQLite schema + CRUD (posts, people, comments, outreach)
+  memory.py        — Learned style + playbook memory files
   scraper.py       — Apify actor wrappers
   models.py        — Post model + Apify data normalization
   people.py        — Person model + Apify data normalization
@@ -226,11 +253,13 @@ skills/
   insaight-research-post.md      — Post comment-thread mining skill
   insaight-draft-outreach.md     — Cold outreach drafting skill
   insaight-draft-post.md         — Company-voice LinkedIn post drafting skill
+  insaight-track-outreach.md     — Sent-message + outcome logging skill
+  insaight-reflect.md            — Memory reflection skill (propose + approve)
   insaight-save-notion.md        — Notion persistence skill
 config/
   accounts.txt     — LinkedIn URLs to track (one per line)
-tests/             — pytest suite (hermetic, in-memory SQLite)
-data/              — Local SQLite DB + raw dumps (gitignored)
+tests/             — pytest suite (hermetic, temp SQLite)
+data/              — Local SQLite DB + memory files + raw dumps (gitignored)
 ```
 
 ## Apify actors

@@ -1,17 +1,17 @@
 ---
 name: insaight-draft-outreach
-description: "Draft a personalized cold outreach message (LinkedIn DM or email) using (1) intelligence from a prior Insaight research brief and (2) the user's demonstrated style from their outreach log page in Notion (configured as NOTION_OUTREACH_LOG in CLAUDE.md). That page is the source of truth for the user's voice — never write to it. Trigger when the user asks to: draft outreach, write a cold message, help reach out to someone, compose a LinkedIn DM, or write a cold email. Trigger phrases: 'draft outreach to [person/company]', 'write a cold message to', 'help me reach out to', 'cold email for', 'LinkedIn DM to', 'write an intro message'. If no research exists in conversation, suggest running insaight-research-person or insaight-research-company first."
+description: "Draft a personalized cold outreach message (LinkedIn DM or email) using (1) intelligence from a prior Insaight research brief, (2) the learned style memory (insaight:get_memory — the distilled voice + playbook), and (3) a prior-contact check against the outreach ledger. Trigger when the user asks to: draft outreach, write a cold message, help reach out to someone, compose a LinkedIn DM, or write a cold email. Trigger phrases: 'draft outreach to [person/company]', 'write a cold message to', 'help me reach out to', 'cold email for', 'LinkedIn DM to', 'write an intro message'. If no research exists in conversation, suggest running insaight-research-person or insaight-research-company first."
 ---
 
 # Insaight — Draft Cold Outreach
 
-Craft personalized cold messages using two inputs:
+Craft personalized cold messages using three inputs:
 1. The intelligence brief from a prior research skill (conversation context).
-2. The user's **[NOTION_OUTREACH_LOG]** Notion page — their voice archive and style
-   source of truth. (Page name configured in CLAUDE.md → Notion Setup.)
+2. The **learned memory** — `insaight:get_memory()` returns the distilled style
+   guide (the user's voice) and playbook (strategies with reply-rate evidence).
+3. The **outreach ledger** — prior-contact check via `insaight:list_outreach()`.
 
-This skill does not call the Insaight MCP tools. It reads Notion and
-synthesises from what's already in the conversation.
+All tools must be loaded first via `tool_search(query="insaight")`.
 
 ---
 
@@ -27,61 +27,46 @@ If **no research exists**, stop and tell the user:
 
 ---
 
-## Step 2 — Load [NOTION_OUTREACH_LOG] (STYLE SOURCE OF TRUTH)
-
-Find and fetch the outreach log page. See CLAUDE.md → Notion Integration for
-the configured page name.
+## Step 2 — Load the memory (STYLE + PLAYBOOK)
 
 ```
-notion:search(query="[NOTION_OUTREACH_LOG]")
-→ notion:fetch([page_id])
+insaight:get_memory()
 ```
+
+- If `style_learned` is true: the style file is the voice source of truth.
+  Follow it exactly — it was distilled from real sends the user approved.
+- If `playbook_learned` is true: prefer hooks/variants the playbook marks
+  as working; treat its "hypotheses" as worth testing, and avoid anything
+  in its "Retired" section.
+- If **neither is learned yet** (fresh install): fall back in this order —
+  (a) `insaight:list_outreach(limit=10, full=true)` to read recent real sends,
+  (b) the user's Notion outreach log if one is configured (CLAUDE.md →
+  NOTION_OUTREACH_LOG), (c) the generic principles in Step 4. Mention once:
+  "No learned style memory yet — after a few logged sends and outcomes,
+  run insaight-reflect and drafts will match your voice."
 
 **Cache this for the entire conversation.** Do not re-fetch on iteration.
-
-If Notion MCP is not connected or the page can't be found, tell the user
-once and fall back to the generic principles in Step 5. Prefer [NOTION_OUTREACH_LOG]
-over the principles whenever possible — the user's own voice beats any
-template.
 
 ---
 
 ## Step 3 — Check for prior contact
 
-Scan [NOTION_OUTREACH_LOG] for mentions of the target person or their company. If found:
+```
+insaight:list_outreach(target="<name or profile URL or company>")
+```
 
-> "⚠️ [NOTION_OUTREACH_LOG] shows you messaged [Name] on [approx date]. Is this a
-> follow-up? If yes, I'll draft a follow-up; if this is a mistake, tell me
-> who you actually want to reach."
+If any records come back:
+
+> "⚠️ The ledger shows you messaged [Name] on [date] (outcome: [outcome]).
+> Is this a follow-up? If yes, I'll draft a follow-up; if this is a
+> mistake, tell me who you actually want to reach."
 
 A follow-up requires a different structure than a first-touch — acknowledge
 prior contact, reference specifically what changed, shorter CTA.
 
 ---
 
-## Step 4 — Extract style from [NOTION_OUTREACH_LOG]
-
-Before drafting, read the 3–5 most recent messages in [NOTION_OUTREACH_LOG] and identify:
-
-- **Opening patterns**: Does the user open with an observation? A question?
-  A direct statement? A compliment? A shared detail?
-- **Tone register**: Formal / casual / peer-to-peer / deferential? Does the
-  user use humour, first names, English only or mixed languages?
-- **CTA shape**: "Worth a call?" / "Open to chatting?" / direct question / no
-  explicit CTA?
-- **Length**: Count sentences and approximate words — what's their typical
-  size for a LinkedIn DM vs email?
-- **Specific phrases / tics**: Any recurring words, transitions, or sign-offs?
-- **Language choices**: When do they write in Dutch vs English? Do they
-  switch mid-message?
-- **What they DON'T do**: Do they avoid exclamation marks? Subject lines?
-  Formal greetings?
-
-These extracted patterns override the generic principles in Step 5.
-
----
-
-## Step 5 — Draft (matching the user's style)
+## Step 4 — Draft (matching the learned style)
 
 Produce **two variants**, each in the two formats expected:
 
@@ -91,13 +76,16 @@ Opens with a specific observation or shared detail. Builds before pitch.
 ### Variant B — Direct / ROI-led
 Opens with the pain / opportunity. Gets to the point faster.
 
-**Formats per variant:**
-- **LinkedIn DM** — matching the typical DM length observed in [NOTION_OUTREACH_LOG]
-  (don't default to 5 sentences if the user's actual DMs are shorter).
-- **Email** — matching the typical email length and subject-line style
-  observed in [NOTION_OUTREACH_LOG].
+If the playbook shows one variant or hook type clearly outperforming
+(with real n), say so and lead with it — but still produce both variants
+unless the user asked for one.
 
-### Fallback principles (only when [NOTION_OUTREACH_LOG] is unavailable)
+**Formats per variant:**
+- **LinkedIn DM** — matching the typical DM length from the style memory.
+- **Email** — matching the typical email length and subject-line style
+  from the style memory.
+
+### Fallback principles (only when no memory and no history exists)
 
 - Lead with a specific observation from their posts — not generic flattery.
 - Name the pain at their scale; specific enough that they think "this
@@ -110,10 +98,11 @@ Opens with the pain / opportunity. Gets to the point faster.
 
 ---
 
-## Step 6 — Show your work
+## Step 5 — Show your work
 
 When presenting the drafts, briefly note:
-- What style signals you pulled from [NOTION_OUTREACH_LOG] (1–2 lines).
+- Which style signals you followed from the memory (1–2 lines).
+- Which playbook evidence influenced hook/variant choice, if any.
 - Which commonality or hook from the research you're leading with.
 
 This lets the user sanity-check the style match before they copy anything.
@@ -123,6 +112,7 @@ This lets the user sanity-check the style match before they copy anything.
 ## After drafting
 
 - Offer to iterate: "Want me to adjust the angle, tone, or CTA?"
-- **Do NOT save anywhere.** The user logs messages to [NOTION_OUTREACH_LOG] manually.
-- If the user says they sent it, remind them: "Don't forget to add it to
-  [NOTION_OUTREACH_LOG] so the style bank stays current."
+- When the user says they **sent** a message, log it immediately via the
+  **insaight-track-outreach** skill (`log_outreach` with the exact sent text,
+  variant, and hook_type). That's what keeps the memory loop learning.
+- Do not write to Notion.
