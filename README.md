@@ -179,13 +179,29 @@ Edit `.env` and add your tokens:
 }
 ```
 
-**Claude Code** — add to `~/.claude/settings.json` under `mcpServers`, same format.
+**Claude Code** — register the server with the CLI:
 
-Restart Claude after adding the config. The 8 insaight tools will appear automatically.
+```bash
+claude mcp add insaight -s user \
+  --env PYTHONPATH=/absolute/path/to/insaight \
+  -- /absolute/path/to/insaight/.venv/bin/python3 -m src.mcp_server
+```
+
+Restart Claude after adding the config. The 17 insaight tools will appear automatically.
 
 ### 4. Install skills
 
-Open Claude Desktop, go to **Settings → Skills** and click **Add skills**. Select all the `.md` files from the `skills/` directory (or drag and drop them in). The insaight skills will appear in Claude immediately — no restart needed.
+**Claude Desktop** — go to **Settings → Skills** and click **Add skills**. Select all the `.md` files from the `skills/` directory (or drag and drop them in). The insaight skills will appear in Claude immediately — no restart needed.
+
+**Claude Code** — copy each skill into your skills directory as a folder containing a `SKILL.md`:
+
+```bash
+for f in skills/insaight-*.md; do
+  name=$(basename "$f" .md)
+  mkdir -p ~/.claude/skills/"$name"
+  cp "$f" ~/.claude/skills/"$name"/SKILL.md
+done
+```
 
 ### 5. Connect the Notion MCP
 
@@ -267,7 +283,23 @@ data/              — Local SQLite DB + memory files + raw dumps (gitignored)
 | Actor | What it scrapes | Approximate cost |
 |-------|----------------|-----------------|
 | `harvestapi/linkedin-profile-posts` | Posts from company or personal profiles | ~$1.50 / 1k posts |
-| `harvestapi/linkedin-company-employees` | Employee and leadership data | ~$4 / 1k profiles |
+| `harvestapi/linkedin-company-employees` | Employee and leadership data | ~$4 / 1k (Short) / ~$8 / 1k (Full) |
+| `harvestapi/linkedin-profile-scraper` | Single-profile enrichment | ~$4 / 1k (~$10 / 1k with email search) |
+| `harvestapi/linkedin-post-comments` | Comment threads on a post | see actor page |
+
+Costs are the actors' published rates at time of writing — check the actor pages on Apify for current pricing.
+
+## Data, privacy & terms
+
+- **Everything stays local.** Scraped posts, people, the outreach ledger, and the
+  learned memory live in SQLite and Markdown files on your machine. Nothing is
+  sent anywhere except your own Apify/Anthropic/Notion accounts.
+- **No inbox access.** Outcomes are logged because you say "she replied" — the
+  tool never reads your LinkedIn messages or email.
+- **LinkedIn terms.** Insaight fetches public LinkedIn data through third-party
+  Apify actors. Automated collection of LinkedIn data may conflict with
+  LinkedIn's Terms of Service; you are responsible for how you use this tool.
+  Keep volumes reasonable and respect the people behind the profiles.
 
 ## Running tests
 
@@ -275,8 +307,8 @@ data/              — Local SQLite DB + memory files + raw dumps (gitignored)
 pytest tests/ -v
 ```
 
-All tests use in-memory SQLite — no API calls, no credentials needed.
+All tests run against temporary SQLite databases — no API calls, no credentials needed.
 
 ## License
 
-MIT
+[MIT](LICENSE)
