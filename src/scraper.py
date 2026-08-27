@@ -14,6 +14,14 @@ PROFILE_MODE_DETAILS = "Profile details no email ($4 per 1k)"
 PROFILE_MODE_DETAILS_EMAIL = "Profile details + email search ($10 per 1k)"
 
 
+def _dataset_id(run) -> str:
+    # apify-client >= 3.0 returns a typed Run model (or None if the run
+    # failed to start) instead of the old dict.
+    if run is None:
+        raise RuntimeError("Apify actor run failed to start (call() returned None)")
+    return run.default_dataset_id
+
+
 def scrape_account(api_token: str, profile_url: str, max_posts: int = 50) -> list[dict]:
     """Run the Apify LinkedIn post scraper for a single profile or company URL."""
     client = ApifyClient(api_token)
@@ -24,7 +32,7 @@ def scrape_account(api_token: str, profile_url: str, max_posts: int = 50) -> lis
     }
 
     run = client.actor(ACTOR_ID).call(run_input=run_input)
-    items = list(client.dataset(run["defaultDatasetId"]).iterate_items())
+    items = list(client.dataset(_dataset_id(run)).iterate_items())
     return items
 
 
@@ -56,7 +64,7 @@ def scrape_people(
         run_input["jobTitles"] = job_titles
 
     run = client.actor(PEOPLE_ACTOR_ID).call(run_input=run_input)
-    return list(client.dataset(run["defaultDatasetId"]).iterate_items())
+    return list(client.dataset(_dataset_id(run)).iterate_items())
 
 
 def scrape_person_profile(
@@ -80,7 +88,7 @@ def scrape_person_profile(
         "profileScraperMode": PROFILE_MODE_DETAILS_EMAIL if with_email else PROFILE_MODE_DETAILS,
     }
     run = client.actor(PROFILE_ACTOR_ID).call(run_input=run_input)
-    items = list(client.dataset(run["defaultDatasetId"]).iterate_items())
+    items = list(client.dataset(_dataset_id(run)).iterate_items())
     return items[0] if items else None
 
 
@@ -108,7 +116,7 @@ def scrape_post_comments(
         "profileScraperMode": profile_mode,
     }
     run = client.actor(POST_COMMENTS_ACTOR_ID).call(run_input=run_input)
-    return list(client.dataset(run["defaultDatasetId"]).iterate_items())
+    return list(client.dataset(_dataset_id(run)).iterate_items())
 
 
 def scrape_accounts(api_token: str, profile_urls: list[str], max_posts: int = 50, verbose: bool = False) -> dict[str, list[dict]]:
