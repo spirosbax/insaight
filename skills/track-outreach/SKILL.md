@@ -1,5 +1,5 @@
 ---
-name: insaight-track-outreach
+name: track-outreach
 description: "Track sent outreach and its outcomes in the local ledger. Two moments: (1) the user says they SENT a message — log it with log_outreach; (2) the user reports what HAPPENED — record it with record_outcome (replied / positive / meeting booked / ghosted). After recording an outcome, if the response says reflection is due, offer to run insaight-reflect. Trigger phrases: 'I sent it', 'log this outreach', 'sent the DM to', 'record a reply', 'he/she replied', 'they answered', 'got a response from', 'meeting booked with', 'mark as ghosted', 'no reply from', 'never heard back'. This ledger replaces the manual Notion sent-log — it powers prior-contact checks, reply-rate stats, and the memory reflection loop."
 ---
 

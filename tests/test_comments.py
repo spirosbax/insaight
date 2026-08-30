@@ -1,17 +1,17 @@
 """
 Tests for the comments layer:
-  - src/comments.py    (Comment model + from_apify_result)
-  - src/db.py          (comments CRUD)
-  - src/mcp_server.py  (scrape_post_comments + list_comments tools)
+  - insaight/comments.py    (Comment model + from_apify_result)
+  - insaight/db.py          (comments CRUD)
+  - insaight/mcp_server.py  (scrape_post_comments + list_comments tools)
 """
 
 import json
 import pytest
 from unittest.mock import patch
 
-from src import db
-from src.comments import Comment, flatten_apify_items
-from src.mcp_server import (
+from insaight import db
+from insaight.comments import Comment, flatten_apify_items
+from insaight.mcp_server import (
     scrape_post_comments,
     list_comments,
     _extract_post_urn_from_url,
@@ -250,8 +250,8 @@ class TestScrapePostCommentsTool:
             assert post_urls == [POST_URL]
             return [TOP_COMMENT, REPLY_COMMENT]
 
-        with patch("src.mcp_server.scraper.scrape_post_comments", side_effect=fake_scrape), \
-             patch("src.mcp_server.db.get_connection",
+        with patch("insaight.mcp_server.scraper.scrape_post_comments", side_effect=fake_scrape), \
+             patch("insaight.mcp_server.db.get_connection",
                    side_effect=lambda *a, **kw: real(str(db_path))):
             result = scrape_post_comments(post_url=POST_URL)
 
@@ -270,8 +270,8 @@ class TestScrapePostCommentsTool:
             captured["max_items"] = max_items
             return []
 
-        with patch("src.mcp_server.scraper.scrape_post_comments", side_effect=fake_scrape), \
-             patch("src.mcp_server.db.get_connection",
+        with patch("insaight.mcp_server.scraper.scrape_post_comments", side_effect=fake_scrape), \
+             patch("insaight.mcp_server.db.get_connection",
                    side_effect=lambda *a, **kw: real(str(db_path))):
             scrape_post_comments(post_url=POST_URL, max_items=9999)
 
@@ -291,7 +291,7 @@ class TestListCommentsTool:
     def test_returns_stored_comments(self, db_path, monkeypatch):
         self._seed(db_path)
         real = db.get_connection
-        with patch("src.mcp_server.db.get_connection",
+        with patch("insaight.mcp_server.db.get_connection",
                    side_effect=lambda *a, **kw: real(str(db_path))):
             result = json.loads(list_comments(post_url=POST_URL))
         assert len(result) == 2
@@ -300,7 +300,7 @@ class TestListCommentsTool:
     def test_min_likes_filter(self, db_path):
         self._seed(db_path)
         real = db.get_connection
-        with patch("src.mcp_server.db.get_connection",
+        with patch("insaight.mcp_server.db.get_connection",
                    side_effect=lambda *a, **kw: real(str(db_path))):
             result = json.loads(list_comments(post_url=POST_URL, min_likes=5))
         assert len(result) == 1
@@ -309,7 +309,7 @@ class TestListCommentsTool:
     def test_exclude_replies(self, db_path):
         self._seed(db_path)
         real = db.get_connection
-        with patch("src.mcp_server.db.get_connection",
+        with patch("insaight.mcp_server.db.get_connection",
                    side_effect=lambda *a, **kw: real(str(db_path))):
             result = json.loads(list_comments(post_url=POST_URL, include_replies=False))
         assert all(not r["is_reply"] for r in result)
@@ -325,7 +325,7 @@ class TestListCommentsTool:
         conn = real(str(db_path))
         db.init_db(conn)
         conn.close()
-        with patch("src.mcp_server.db.get_connection",
+        with patch("insaight.mcp_server.db.get_connection",
                    side_effect=lambda *a, **kw: real(str(db_path))):
             result = list_comments(post_url=POST_URL)
         assert "scrape_post_comments" in result

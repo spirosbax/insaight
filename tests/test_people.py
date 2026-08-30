@@ -1,8 +1,8 @@
 """
 Tests for the people layer:
-  - src/people.py  (Person model + from_apify_result)
-  - src/db.py      (people CRUD)
-  - src/mcp_server (scrape_people + list_people tools)
+  - insaight/people.py  (Person model + from_apify_result)
+  - insaight/db.py      (people CRUD)
+  - insaight/mcp_server (scrape_people + list_people tools)
 """
 
 import json
@@ -11,9 +11,9 @@ import pytest
 from datetime import datetime
 from unittest.mock import patch
 
-from src import db
-from src.people import Person
-from src.mcp_server import scrape_people, list_people, _slug
+from insaight import db
+from insaight.people import Person
+from insaight.mcp_server import scrape_people, list_people, _slug
 
 
 # ---------------------------------------------------------------------------
@@ -299,7 +299,7 @@ def db_path(tmp_path):
 @pytest.fixture(autouse=True)
 def patch_db(db_path):
     real = db.get_connection
-    with patch("src.mcp_server.db.get_connection",
+    with patch("insaight.mcp_server.db.get_connection",
                side_effect=lambda *a, **kw: real(str(db_path))):
         yield
 
@@ -334,8 +334,8 @@ class TestScrapePeopleTool:
         monkeypatch.setenv("APIFY_API_TOKEN", "fake-token")
         real = db.get_connection
 
-        with patch("src.mcp_server.scraper.scrape_people", return_value=fake_apify_items(3)), \
-             patch("src.mcp_server.db.get_connection",
+        with patch("insaight.mcp_server.scraper.scrape_people", return_value=fake_apify_items(3)), \
+             patch("insaight.mcp_server.db.get_connection",
                    side_effect=lambda *a, **kw: real(str(db_path))):
             result = json.loads(scrape_people(url=COMPANY_URL))
 
@@ -348,8 +348,8 @@ class TestScrapePeopleTool:
         monkeypatch.setenv("APIFY_API_TOKEN", "fake-token")
         real = db.get_connection
 
-        with patch("src.mcp_server.scraper.scrape_people", return_value=fake_apify_items(2)), \
-             patch("src.mcp_server.db.get_connection",
+        with patch("insaight.mcp_server.scraper.scrape_people", return_value=fake_apify_items(2)), \
+             patch("insaight.mcp_server.db.get_connection",
                    side_effect=lambda *a, **kw: real(str(db_path))):
             scrape_people(url=COMPANY_URL)
             result = json.loads(scrape_people(url=COMPANY_URL))
@@ -359,13 +359,13 @@ class TestScrapePeopleTool:
 
     def test_empty_response_returns_message(self, monkeypatch):
         monkeypatch.setenv("APIFY_API_TOKEN", "fake-token")
-        with patch("src.mcp_server.scraper.scrape_people", return_value=[]):
+        with patch("insaight.mcp_server.scraper.scrape_people", return_value=[]):
             result = scrape_people(url=COMPANY_URL)
         assert "No people returned" in result
 
     def test_apify_error_returns_message(self, monkeypatch):
         monkeypatch.setenv("APIFY_API_TOKEN", "fake-token")
-        with patch("src.mcp_server.scraper.scrape_people",
+        with patch("insaight.mcp_server.scraper.scrape_people",
                    side_effect=Exception("timeout")):
             result = scrape_people(url=COMPANY_URL)
         assert "timeout" in result
@@ -379,8 +379,8 @@ class TestScrapePeopleTool:
             captured["max_items"] = max_items
             return []
 
-        with patch("src.mcp_server.scraper.scrape_people", side_effect=fake_scrape), \
-             patch("src.mcp_server.db.get_connection",
+        with patch("insaight.mcp_server.scraper.scrape_people", side_effect=fake_scrape), \
+             patch("insaight.mcp_server.db.get_connection",
                    side_effect=lambda *a, **kw: real(str(db_path))):
             scrape_people(url=COMPANY_URL, max_items=9999)
 
@@ -395,8 +395,8 @@ class TestScrapePeopleTool:
             captured["job_titles"] = job_titles
             return []
 
-        with patch("src.mcp_server.scraper.scrape_people", side_effect=fake_scrape), \
-             patch("src.mcp_server.db.get_connection",
+        with patch("insaight.mcp_server.scraper.scrape_people", side_effect=fake_scrape), \
+             patch("insaight.mcp_server.db.get_connection",
                    side_effect=lambda *a, **kw: real(str(db_path))):
             scrape_people(url=COMPANY_URL, job_titles=["CEO", "Founder"])
 
@@ -637,7 +637,7 @@ class TestDBMigrationAndUpsert:
 # scrape_person_profile MCP tool
 # ---------------------------------------------------------------------------
 
-from src.mcp_server import scrape_person_profile
+from insaight.mcp_server import scrape_person_profile
 
 
 class TestScrapePersonProfileTool:
@@ -658,8 +658,8 @@ class TestScrapePersonProfileTool:
         def fake_scrape(token, url, with_email=False):
             return FULL_PROFILE_APIFY
 
-        with patch("src.mcp_server.scraper.scrape_person_profile", side_effect=fake_scrape), \
-             patch("src.mcp_server.db.get_connection",
+        with patch("insaight.mcp_server.scraper.scrape_person_profile", side_effect=fake_scrape), \
+             patch("insaight.mcp_server.db.get_connection",
                    side_effect=lambda *a, **kw: real(str(db_path))):
             result = scrape_person_profile(url="https://www.linkedin.com/in/jane-doe")
 
@@ -677,8 +677,8 @@ class TestScrapePersonProfileTool:
         def fake_scrape(token, url, with_email=False):
             return FULL_PROFILE_APIFY
 
-        with patch("src.mcp_server.scraper.scrape_person_profile", side_effect=fake_scrape), \
-             patch("src.mcp_server.db.get_connection",
+        with patch("insaight.mcp_server.scraper.scrape_person_profile", side_effect=fake_scrape), \
+             patch("insaight.mcp_server.db.get_connection",
                    side_effect=lambda *a, **kw: real(str(db_path))):
             result = scrape_person_profile(url="https://www.linkedin.com/in/jane-doe")
 
@@ -689,8 +689,8 @@ class TestScrapePersonProfileTool:
         monkeypatch.setenv("APIFY_API_TOKEN", "fake-token")
         real = db.get_connection
 
-        with patch("src.mcp_server.scraper.scrape_person_profile", return_value=None), \
-             patch("src.mcp_server.db.get_connection",
+        with patch("insaight.mcp_server.scraper.scrape_person_profile", return_value=None), \
+             patch("insaight.mcp_server.db.get_connection",
                    side_effect=lambda *a, **kw: real(str(db_path))):
             result = scrape_person_profile(url="https://www.linkedin.com/in/missing-person")
         assert "No profile returned" in result
@@ -710,8 +710,8 @@ class TestScrapePeopleFullMode:
             captured["full_mode"] = full_mode
             return []
 
-        with patch("src.mcp_server.scraper.scrape_people", side_effect=fake_scrape), \
-             patch("src.mcp_server.db.get_connection",
+        with patch("insaight.mcp_server.scraper.scrape_people", side_effect=fake_scrape), \
+             patch("insaight.mcp_server.db.get_connection",
                    side_effect=lambda *a, **kw: real(str(db_path))):
             scrape_people(url=COMPANY_URL, full_mode=True)
 
@@ -726,8 +726,8 @@ class TestScrapePeopleFullMode:
             captured["full_mode"] = full_mode
             return []
 
-        with patch("src.mcp_server.scraper.scrape_people", side_effect=fake_scrape), \
-             patch("src.mcp_server.db.get_connection",
+        with patch("insaight.mcp_server.scraper.scrape_people", side_effect=fake_scrape), \
+             patch("insaight.mcp_server.db.get_connection",
                    side_effect=lambda *a, **kw: real(str(db_path))):
             scrape_people(url=COMPANY_URL)
 

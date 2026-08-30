@@ -1,5 +1,5 @@
 """
-Tests for src/mcp_server.py — MCP tools and internal helpers.
+Tests for insaight/mcp_server.py — MCP tools and internal helpers.
 
 Strategy: monkey-patch db.get_connection() to return an in-memory DB so no
 production data is touched and tests are hermetic and fast.
@@ -12,8 +12,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-from src import db
-from src.mcp_server import (
+from insaight import db
+from insaight.mcp_server import (
     _slug,
     _resolve_account,
     _snippet,
@@ -85,10 +85,10 @@ def patch_db(db_path):
     Each call gets a fresh connection so close() doesn't break subsequent calls.
 
     We capture the real function BEFORE patch() replaces it to avoid infinite
-    recursion (src.mcp_server.db IS src.db — same module object).
+    recursion (insaight.mcp_server.db IS insaight.db — same module object).
     """
     real_get_connection = db.get_connection
-    with patch("src.mcp_server.db.get_connection",
+    with patch("insaight.mcp_server.db.get_connection",
                side_effect=lambda *a, **kw: real_get_connection(str(db_path))):
         yield
 
@@ -304,7 +304,7 @@ class TestGetPosts:
         for i in range(25):
             insert_raw(c, f"bulk-{i}", ACME_URL, f"post {i}", datetime.now().isoformat())
         c.close()
-        with patch("src.mcp_server.db.get_connection",
+        with patch("insaight.mcp_server.db.get_connection",
                    side_effect=lambda *a, **kw: real(str(path))):
             urns = [f"bulk-{i}" for i in range(25)]
             result = json.loads(get_posts(urns=urns))
@@ -397,8 +397,8 @@ class TestScrapeProfile:
         monkeypatch.setenv("APIFY_API_TOKEN", "fake-token")
         real = db.get_connection
 
-        with patch("src.mcp_server.scraper.scrape_account", return_value=self._fake_items(3)), \
-             patch("src.mcp_server.db.get_connection",
+        with patch("insaight.mcp_server.scraper.scrape_account", return_value=self._fake_items(3)), \
+             patch("insaight.mcp_server.db.get_connection",
                    side_effect=lambda *a, **kw: real(str(db_path))):
             result_str = scrape_profile(url=self.LINKEDIN_URL)
 
@@ -412,8 +412,8 @@ class TestScrapeProfile:
         monkeypatch.setenv("APIFY_API_TOKEN", "fake-token")
         real = db.get_connection
 
-        with patch("src.mcp_server.scraper.scrape_account", return_value=self._fake_items(3)), \
-             patch("src.mcp_server.db.get_connection",
+        with patch("insaight.mcp_server.scraper.scrape_account", return_value=self._fake_items(3)), \
+             patch("insaight.mcp_server.db.get_connection",
                    side_effect=lambda *a, **kw: real(str(db_path))):
             scrape_profile(url=self.LINKEDIN_URL)  # first run
             result = json.loads(scrape_profile(url=self.LINKEDIN_URL))  # second run
@@ -423,13 +423,13 @@ class TestScrapeProfile:
 
     def test_empty_response_returns_message(self, monkeypatch):
         monkeypatch.setenv("APIFY_API_TOKEN", "fake-token")
-        with patch("src.mcp_server.scraper.scrape_account", return_value=[]):
+        with patch("insaight.mcp_server.scraper.scrape_account", return_value=[]):
             result = scrape_profile(url=self.LINKEDIN_URL)
         assert "No posts returned" in result
 
     def test_apify_error_returns_message(self, monkeypatch):
         monkeypatch.setenv("APIFY_API_TOKEN", "fake-token")
-        with patch("src.mcp_server.scraper.scrape_account",
+        with patch("insaight.mcp_server.scraper.scrape_account",
                    side_effect=Exception("network timeout")):
             result = scrape_profile(url=self.LINKEDIN_URL)
         assert "network timeout" in result
@@ -443,8 +443,8 @@ class TestScrapeProfile:
             captured["max_posts"] = max_posts
             return []
 
-        with patch("src.mcp_server.scraper.scrape_account", side_effect=fake_scrape), \
-             patch("src.mcp_server.db.get_connection",
+        with patch("insaight.mcp_server.scraper.scrape_account", side_effect=fake_scrape), \
+             patch("insaight.mcp_server.db.get_connection",
                    side_effect=lambda *a, **kw: real(str(db_path))):
             scrape_profile(url=self.LINKEDIN_URL, max_posts=9999)
 

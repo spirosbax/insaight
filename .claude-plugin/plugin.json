@@ -1,0 +1,11 @@
+{
+  "name": "insaight",
+  "version": "0.1.0",
+  "description": "LinkedIn prospect intelligence for Claude: research people and companies, draft personalized outreach, and learn what gets replies.",
+  "author": { "name": "Spiros Baxevanakis", "url": "https://github.com/spirosbax" },
+  "homepage": "https://github.com/spirosbax/insaight",
+  "repository": "https://github.com/spirosbax/insaight",
+  "license": "MIT",
+  "keywords": ["linkedin", "sales", "outreach", "prospecting", "mcp"],
+  "mcpServers": "./.mcp.json"
+}

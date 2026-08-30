@@ -1,5 +1,5 @@
 ---
-name: insaight-research-company
+name: research-company
 description: "Analyze a company's LinkedIn posts and C-level executive posts using the Insaight MCP connector to build a structured intelligence profile covering past trajectory, current priorities, and future direction — then evaluate the company as a prospect. Trigger when the user asks to: research a company, analyze what a company is focused on, evaluate a prospect, understand a company's strategy from social signals, or qualify a company for outreach. Trigger phrases: 'research [company]', 'analyze [company]', 'check Insaight for [company]', 'what is [company] posting about', 'evaluate [company] as prospect'. This skill is for companies — for individual person research, use insaight-research-person instead."
 ---
 
@@ -8,8 +8,16 @@ description: "Analyze a company's LinkedIn posts and C-level executive posts usi
 Build a structured intelligence brief on a company from their LinkedIn posts
 and their leadership's personal posts. Includes prospect evaluation.
 
-Shared tool reference and reading patterns are in CLAUDE.md — refer to them
-throughout this workflow.
+**Shared conventions** (all Insaight skills):
+- Call `insaight:get_config()` once per session for the user's Notion pages
+  and company name/slug. If it reports `unconfigured: true`, ask the user to
+  edit the file at the returned path before saving to Notion.
+- Read cheaply: `list_accounts` → `list_posts` (slim index) → `get_posts` on
+  the few URNs worth reading (max 20 per call). `list_people` / `list_comments`
+  are free; the `scrape_*` tools call Apify and cost money — only scrape when
+  data is missing or stale.
+- Engagement benchmarks (adjust for the niche): < 10 likes low, 10–40 normal,
+  40+ high signal — read those in full.
 
 ---
 
@@ -17,8 +25,8 @@ throughout this workflow.
 
 ### Step 0 — Check Notion first (always)
 
-Before touching Apify or SQLite, check what you already know. See CLAUDE.md →
-Notion Integration for locations.
+Before touching Apify or SQLite, check what you already know. Locations come from
+`insaight:get_config()`.
 
 **0a. Existing research page:**
 ```

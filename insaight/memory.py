@@ -3,23 +3,23 @@ Persistent outreach memory — two distilled Markdown files that the
 draft-outreach skill reads instead of re-deriving style from raw history
 every session.
 
-  data/memory/style.md    — the user's voice: hooks, tone, length, tics
-  data/memory/playbook.md — what gets replies: strategies with evidence counts
+  <INSAIGHT_HOME>/memory/style.md    — the user's voice: hooks, tone, length, tics
+  <INSAIGHT_HOME>/memory/playbook.md — what gets replies: strategies with evidence counts
 
 Both files are rewritten by the insaight-reflect skill (with user approval),
-never silently. They live under data/ so they stay local and gitignored.
+never silently. They live under INSAIGHT_HOME (default ~/.insaight) so they stay local.
 """
 
 import os
 from pathlib import Path
 
-MEMORY_DIR = Path(__file__).parent.parent / "data" / "memory"
+from . import paths
 
 
 def _default_memory_dir() -> Path:
-    """INSAIGHT_MEMORY_DIR env var overrides the default data/memory location."""
+    """INSAIGHT_MEMORY_DIR env var overrides the default <INSAIGHT_HOME>/memory."""
     env = os.environ.get("INSAIGHT_MEMORY_DIR", "")
-    return Path(env) if env else MEMORY_DIR
+    return Path(env) if env else paths.home() / "memory"
 
 _KINDS = ("style", "playbook")
 

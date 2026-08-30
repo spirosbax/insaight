@@ -3,14 +3,16 @@
 Scrapes LinkedIn company pages and personal profiles via Apify, stores in SQLite,
 and exposes them to Claude via MCP for prospect research and cold outreach.
 
-Skills live in `skills/` — each is independently invocable and they chain
+Skills live in `skills/<name>/SKILL.md` — each is independently invocable and they chain
 conversationally (research → outreach → save).
 
 ---
 
 ## Setup
 
-Edit these values once before first use. All skills read them from here.
+User config lives in `~/.insaight/config.md` (created by `get_config()` on
+first call) — **not** in this file. The block below is the template; skills
+call `insaight:get_config` to read it.
 
 ```
 NOTION_WORKSPACE:     YourWorkspaceName   # your Notion workspace / team name
@@ -45,6 +47,7 @@ All tools must be loaded first via `tool_search(query="insaight")`.
 | `insaight:get_outreach_stats` | Reply-rate breakdown by hook/variant/channel + reflection state | — |
 | `insaight:get_memory` | Read distilled style + playbook memory (draft skills read THIS) | — |
 | `insaight:update_memory` | Rewrite a memory file — only after user approval | `kind`, `content`, `mark_reflection_done` |
+| `insaight:get_config` | User config: Notion pages + company name/slug (`~/.insaight/config.md`) | — |
 
 ### Efficient reading pattern
 
@@ -83,7 +86,7 @@ free/instant — always try it first.
 - Company page: `acme-charging` (matches the LinkedIn URL slug)
 - Personal profile: `jane-doe-12345678` (matches the LinkedIn profile ID)
 
-### Engagement benchmarks (EV charging niche, NL/EU market)
+### Engagement benchmarks (example: EV charging niche, NL/EU B2B — adjust for yours)
 
 - < 10 likes = low
 - 10–40 likes = normal
@@ -98,8 +101,8 @@ The ledger + memory system replaces re-reading a raw sent-log every session:
    meeting, or gives up (`ghosted`). The user decides when something is ghosted.
 3. After `REFLECT_EVERY` outcomes (env var, default 10), `record_outcome`
    returns `reflection_due: true` → offer the **insaight-reflect** skill.
-4. Reflection proposes updates to `data/memory/style.md` (voice) and
-   `data/memory/playbook.md` (strategies with evidence counts) — the user
+4. Reflection proposes updates to `~/.insaight/memory/style.md` (voice) and
+   `~/.insaight/memory/playbook.md` (strategies with evidence counts) — the user
    approves before `update_memory` is called. Never overwrite memory silently.
 5. **draft-outreach reads `get_memory()`**, not raw history — constant token
    cost regardless of ledger size.
@@ -111,7 +114,7 @@ replied"); below n=10 a pattern is a hypothesis, not a rule.
 
 - **Personal profiles vs company pages**: Personal profiles (founders, CEOs) often
   reveal more strategic signal than corporate pages. If both are tracked, read both.
-- **Dutch/Flemish content**: Many Dutch CPOs post in Dutch. Translate mentally and
+- **Non-English content**: Many European prospects post in their own language. Translate mentally and
   include in your analysis — don't skip non-English posts.
 - **Low post volume**: If the account has < 10 posts, supplement with
   `web_search("[company name] EV charging news 2025 2026")`.
@@ -141,7 +144,7 @@ Parent page containing one sub-page per researched person/company.
 
 **The outreach ledger + memory system (see "Outreach memory loop") has replaced
 this page.** Sends live in the SQLite `outreach` table; style lives in
-`data/memory/style.md`. Only fall back to this Notion page when `get_memory()`
+`~/.insaight/memory/style.md`. Only fall back to this Notion page when `get_memory()`
 reports nothing learned AND `list_outreach()` is empty (fresh install with
 pre-existing Notion history).
 

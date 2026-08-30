@@ -1,12 +1,12 @@
 """
-Tests for src/models.py — Post.from_apify_result() covers both actors:
+Tests for insaight/models.py — Post.from_apify_result() covers both actors:
   - harvestapi/linkedin-profile-posts  (acme-charging feed)
   - harvestapi/linkedin-post-search    (keyword search, same schema)
 """
 
 import json
 import pytest
-from src.models import Post, _extract_datetime, _to_int
+from insaight.models import Post, _extract_datetime, _to_int
 
 
 # ---------------------------------------------------------------------------

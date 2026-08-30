@@ -1,5 +1,5 @@
 ---
-name: insaight-research-post
+name: research-post
 description: "Research a single LinkedIn post and its commenters using the Insaight MCP connector. Surfaces who engaged, what they said, recurring themes, buying signals, decision-makers in the thread, and warm leads to potentially reach out to. Trigger when the user asks to: research a post, analyze a post's comments, see who engaged with a post, find decision-makers from a thread, or extract leads from a discussion. Trigger phrases: 'research this post', 'who commented on [URL]', 'analyze the comments on', 'who engaged with this post', 'extract leads from this thread', 'what are people saying about [post]'. Input: a LinkedIn post URL."
 ---
 
@@ -10,7 +10,16 @@ discussion reveals about the surrounding network. Useful when you want to
 mine a post for warm leads, decision-makers, competitor mentions, or genuine
 buying signals.
 
-Shared tool reference and reading patterns are in CLAUDE.md.
+**Shared conventions** (all Insaight skills):
+- Call `insaight:get_config()` once per session for the user's Notion pages
+  and company name/slug. If it reports `unconfigured: true`, ask the user to
+  edit the file at the returned path before saving to Notion.
+- Read cheaply: `list_accounts` → `list_posts` (slim index) → `get_posts` on
+  the few URNs worth reading (max 20 per call). `list_people` / `list_comments`
+  are free; the `scrape_*` tools call Apify and cost money — only scrape when
+  data is missing or stale.
+- Engagement benchmarks (adjust for the niche): < 10 likes low, 10–40 normal,
+  40+ high signal — read those in full.
 
 ---
 
@@ -77,7 +86,7 @@ Use these headings:
 #### 📌 Post Summary
 - Author, role, company
 - Date posted, language
-- Engagement: likes / comments / shares (with benchmarks from CLAUDE.md)
+- Engagement: likes / comments / shares (see shared benchmarks above)
 - One-line gist of what the post is about
 
 #### 💬 Comment Themes

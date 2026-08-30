@@ -1,5 +1,5 @@
 ---
-name: insaight-draft-outreach
+name: draft-outreach
 description: "Draft a personalized cold outreach message (LinkedIn DM or email) using (1) intelligence from a prior Insaight research brief, (2) the learned style memory (insaight:get_memory — the distilled voice + playbook), and (3) a prior-contact check against the outreach ledger. Trigger when the user asks to: draft outreach, write a cold message, help reach out to someone, compose a LinkedIn DM, or write a cold email. Trigger phrases: 'draft outreach to [person/company]', 'write a cold message to', 'help me reach out to', 'cold email for', 'LinkedIn DM to', 'write an intro message'. If no research exists in conversation, suggest running insaight-research-person or insaight-research-company first."
 ---
 
@@ -40,7 +40,7 @@ insaight:get_memory()
   in its "Retired" section.
 - If **neither is learned yet** (fresh install): fall back in this order —
   (a) `insaight:list_outreach(limit=10, full=true)` to read recent real sends,
-  (b) the user's Notion outreach log if one is configured (CLAUDE.md →
+  (b) the user's Notion outreach log if one is configured (`get_config()` →
   NOTION_OUTREACH_LOG), (c) the generic principles in Step 4. Mention once:
   "No learned style memory yet — after a few logged sends and outcomes,
   run insaight-reflect and drafts will match your voice."

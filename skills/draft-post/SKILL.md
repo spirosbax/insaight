@@ -1,14 +1,23 @@
 ---
-name: insaight-draft-post
+name: draft-post
 description: "Draft a LinkedIn post (and optional visual brief) for your company based on a topic, angle, brief, or pasted URL. Loads your company's own past posts as the style reference to match voice, structure, hook patterns, and tone. If a URL is provided, fetches the article content and uses it as the brief. Trigger when the user asks to: write a LinkedIn post, draft a post about [topic], create content for LinkedIn, generate a post idea, write something for your company's LinkedIn, or pastes a link to an article/news story. Trigger phrases: 'write a LinkedIn post', 'draft a post about', 'write a post for my company', 'create LinkedIn content', 'post idea for', 'help me write a post', 'draft a post about this [URL]', 'make a post from this article'. Input: a topic, angle, brief, rough idea, or URL — any length is fine."
 ---
 
 # Insaight — Draft LinkedIn Post
 
-Write LinkedIn posts in your company's voice (set COMPANY_NAME and COMPANY_LINKEDIN in CLAUDE.md) by loading their actual past posts as
+Write LinkedIn posts in your company's voice (COMPANY_NAME and COMPANY_LINKEDIN from `insaight:get_config()`) by loading their actual past posts as
 the style reference before drafting anything.
 
-Shared tool reference and reading patterns are in CLAUDE.md.
+**Shared conventions** (all Insaight skills):
+- Call `insaight:get_config()` once per session for the user's Notion pages
+  and company name/slug. If it reports `unconfigured: true`, ask the user to
+  edit the file at the returned path before saving to Notion.
+- Read cheaply: `list_accounts` → `list_posts` (slim index) → `get_posts` on
+  the few URNs worth reading (max 20 per call). `list_people` / `list_comments`
+  are free; the `scrape_*` tools call Apify and cost money — only scrape when
+  data is missing or stale.
+- Engagement benchmarks (adjust for the niche): < 10 likes low, 10–40 normal,
+  40+ high signal — read those in full.
 
 ---
 

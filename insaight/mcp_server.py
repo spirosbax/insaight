@@ -21,6 +21,7 @@ Outreach memory loop (learns the user's voice + what gets replies):
  15. get_outreach_stats()               → reply-rate breakdown by hook/variant/channel + reflection state
  16. get_memory()                       → read distilled style + playbook memory
  17. update_memory(kind, content, ...)  → rewrite a memory file (reflect skill, after user approval)
+ 18. get_config()                      → user config: Notion pages + company (skills read this first)
 
 This staged approach avoids dumping thousands of tokens of post content up front.
 """
@@ -35,9 +36,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from . import db, models, people as people_module, scraper, comments as comments_module
-from . import memory as memory_module
+from . import memory as memory_module, paths
 
-# Load APIFY_API_TOKEN (and any other vars) from the project .env
+# Load APIFY_API_TOKEN (and any other vars). Real environment wins; then
+# <INSAIGHT_HOME>/.env; then a repo-root .env for developer checkouts.
+load_dotenv(paths.home() / ".env")
 load_dotenv(Path(__file__).parent.parent / ".env")
 
 mcp = FastMCP("insaight")
@@ -380,16 +383,16 @@ def scrape_profile(
     """
     max_posts = min(max_posts, 100)
 
+    url = url.strip()
+    if not url.startswith("https://www.linkedin.com/"):
+        return f"'{url}' does not look like a LinkedIn URL. Expected https://www.linkedin.com/..."
+
     api_token = os.environ.get("APIFY_API_TOKEN", "")
     if not api_token:
         return (
             "APIFY_API_TOKEN is not set. "
-            "Add it to the .env file at the project root and restart the MCP server."
+            f"Add it to {paths.home() / '.env'} (or the env block of your MCP config) and restart the MCP server."
         )
-
-    url = url.strip()
-    if not url.startswith("https://www.linkedin.com/"):
-        return f"'{url}' does not look like a LinkedIn URL. Expected https://www.linkedin.com/..."
 
     try:
         items = scraper.scrape_account(api_token, url, max_posts)
@@ -451,16 +454,16 @@ def scrape_people(
     """
     max_items = min(max_items, 200)
 
+    url = url.strip()
+    if not url.startswith("https://www.linkedin.com/"):
+        return f"'{url}' does not look like a LinkedIn URL. Expected https://www.linkedin.com/..."
+
     api_token = os.environ.get("APIFY_API_TOKEN", "")
     if not api_token:
         return (
             "APIFY_API_TOKEN is not set. "
-            "Add it to the .env file at the project root and restart the MCP server."
+            f"Add it to {paths.home() / '.env'} (or the env block of your MCP config) and restart the MCP server."
         )
-
-    url = url.strip()
-    if not url.startswith("https://www.linkedin.com/"):
-        return f"'{url}' does not look like a LinkedIn URL. Expected https://www.linkedin.com/..."
 
     try:
         items = scraper.scrape_people(
@@ -525,16 +528,16 @@ def scrape_person_profile(
                      If empty, uses the person's current company from Apify (or
                      falls back to the profile URL itself).
     """
+    url = url.strip()
+    if not url.startswith("https://www.linkedin.com/"):
+        return f"'{url}' does not look like a LinkedIn URL. Expected https://www.linkedin.com/..."
+
     api_token = os.environ.get("APIFY_API_TOKEN", "")
     if not api_token:
         return (
             "APIFY_API_TOKEN is not set. "
-            "Add it to the .env file at the project root and restart the MCP server."
+            f"Add it to {paths.home() / '.env'} (or the env block of your MCP config) and restart the MCP server."
         )
-
-    url = url.strip()
-    if not url.startswith("https://www.linkedin.com/"):
-        return f"'{url}' does not look like a LinkedIn URL. Expected https://www.linkedin.com/..."
 
     try:
         item = scraper.scrape_person_profile(api_token, url, with_email=with_email)
@@ -723,7 +726,7 @@ def scrape_post_comments(
     if not api_token:
         return (
             "APIFY_API_TOKEN is not set. "
-            "Add it to the .env file at the project root and restart the MCP server."
+            f"Add it to {paths.home() / '.env'} (or the env block of your MCP config) and restart the MCP server."
         )
 
     post_url = post_url.strip()
@@ -1131,5 +1134,45 @@ def update_memory(
     }, ensure_ascii=False, indent=2)
 
 
-if __name__ == "__main__":
+# ---------------------------------------------------------------------------
+# User config (Notion pages, company) — read by the skills
+# ---------------------------------------------------------------------------
+
+DEFAULT_CONFIG = """\
+# insaight config — edit these once. Skills read this file via get_config().
+
+NOTION_WORKSPACE:     YourWorkspaceName   # your Notion workspace / team name
+NOTION_RESEARCH_PAGE: Prospect Research   # parent page for research briefs
+NOTION_OUTREACH_LOG:  Sent Log            # legacy/optional sent-messages page (read-only)
+COMPANY_NAME:         YourCompany         # your company (used by draft-post)
+COMPANY_LINKEDIN:     your-company-slug   # your LinkedIn company page slug
+"""
+
+
+@mcp.tool()
+def get_config() -> str:
+    """Return the user's insaight config (Notion pages, company name/slug).
+
+    Skills call this first to learn where to save research and whose voice to
+    write in. The file lives at <INSAIGHT_HOME>/config.md (default
+    ~/.insaight/config.md); it is created with placeholder values on first call.
+    If values are still placeholders, ask the user to edit the file.
+    """
+    path = paths.ensure_home() / "config.md"
+    if not path.exists():
+        path.write_text(DEFAULT_CONFIG)
+    content = path.read_text()
+    unconfigured = "YourWorkspaceName" in content or "YourCompany" in content
+    return json.dumps({
+        "path": str(path),
+        "unconfigured": unconfigured,
+        "content": content,
+    }, ensure_ascii=False, indent=2)
+
+
+def main():
     mcp.run()
+
+
+if __name__ == "__main__":
+    main()

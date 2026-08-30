@@ -1,10 +1,10 @@
 """
-Tests for src/db.py — in-memory SQLite so the production DB is never touched.
+Tests for insaight/db.py — in-memory SQLite so the production DB is never touched.
 """
 
 import pytest
-from src import db
-from src.models import Post
+from insaight import db
+from insaight.models import Post
 from datetime import datetime
 
 

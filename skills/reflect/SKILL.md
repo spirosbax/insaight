@@ -1,5 +1,5 @@
 ---
-name: insaight-reflect
+name: reflect
 description: "Reflection run over the outreach ledger: analyze recent sends and their outcomes, then propose evidence-backed updates to the two memory files (style.md — the user's voice; playbook.md — strategies that get replies). Proposals are shown to the user with their evidence and applied only on approval, never silently. Trigger when: record_outcome reports reflection_due=true (offer it), or the user asks directly. Trigger phrases: 'run a reflection', 'reflect on my outreach', 'update my style memory', 'what's working in my outreach', 'analyze my reply rates'."
 ---
 

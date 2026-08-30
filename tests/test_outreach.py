@@ -1,6 +1,6 @@
 """
-Tests for the outreach memory loop — ledger CRUD (src/db.py), memory files
-(src/memory.py), and the six MCP tools (src/mcp_server.py).
+Tests for the outreach memory loop — ledger CRUD (insaight/db.py), memory files
+(insaight/memory.py), and the six MCP tools (insaight/mcp_server.py).
 
 Same strategy as test_mcp_server.py: route db.get_connection() to a temp
 file DB; route memory files to a tmp_path directory.
@@ -12,8 +12,8 @@ from unittest.mock import patch
 
 import pytest
 
-from src import db, memory
-from src.mcp_server import (
+from insaight import db, memory
+from insaight.mcp_server import (
     log_outreach,
     record_outcome,
     list_outreach,
@@ -38,15 +38,15 @@ def db_path(tmp_path):
 @pytest.fixture(autouse=True)
 def patch_db(db_path):
     real_get_connection = db.get_connection
-    with patch("src.mcp_server.db.get_connection",
+    with patch("insaight.mcp_server.db.get_connection",
                side_effect=lambda *a, **kw: real_get_connection(str(db_path))):
         yield
 
 
 @pytest.fixture(autouse=True)
-def patch_memory_dir(tmp_path):
-    with patch("src.memory.MEMORY_DIR", tmp_path / "memory"):
-        yield tmp_path / "memory"
+def patch_memory_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("INSAIGHT_MEMORY_DIR", str(tmp_path / "memory"))
+    yield tmp_path / "memory"
 
 
 def _log(target=TARGET_A, name="Jane Doe", hook="question", variant="warm", **kw):
@@ -217,7 +217,7 @@ class TestRecordOutcome:
         assert "No outreach record with id" in record_outcome(outreach_id=42)
 
     def test_reflection_due_at_threshold(self):
-        with patch("src.mcp_server.REFLECT_EVERY", 2):
+        with patch("insaight.mcp_server.REFLECT_EVERY", 2):
             id1 = _log(target=TARGET_A)["outreach_id"]
             id2 = _log(target=TARGET_B)["outreach_id"]
             r1 = json.loads(record_outcome(outreach_id=id1, outcome="ghosted"))

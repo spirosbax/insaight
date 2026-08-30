@@ -2,13 +2,13 @@ import os
 import sqlite3
 from pathlib import Path
 
-DEFAULT_DB_PATH = Path(__file__).parent.parent / "data" / "posts.db"
+from . import paths
 
 
 def _default_db_path() -> Path:
-    """INSAIGHT_DB_PATH env var overrides the default data/posts.db location."""
+    """INSAIGHT_DB_PATH env var overrides the default <INSAIGHT_HOME>/posts.db."""
     env = os.environ.get("INSAIGHT_DB_PATH", "")
-    return Path(env) if env else DEFAULT_DB_PATH
+    return Path(env) if env else paths.home() / "posts.db"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS posts (

@@ -1,5 +1,5 @@
 ---
-name: insaight-research-person
+name: research-person
 description: "Research an individual person using their LinkedIn posts AND full profile (experience, education, skills, volunteer, languages) via the Insaight MCP connector. Produces a structured intelligence brief covering their role, content themes, professional focus, decision-maker signals, outreach hooks, and uncommon commonalities for outreach. Trigger when the user asks to: research a person, look up someone on LinkedIn, understand what someone is posting about, check a founder/CEO/CTO's focus, or learn about an individual before reaching out. Trigger phrases: 'research [person]', 'look up [person] on LinkedIn', 'what is [person] posting about', 'tell me about [person]', 'check [person] on Insaight', 'find commonalities with [person]'. This skill is for individual people — for company-level research, use insaight-research-company instead."
 ---
 
@@ -12,7 +12,16 @@ commonalities** hide — shared schools, overlapping past employers, mutual
 volunteer work, common languages — and these are the strongest cold outreach
 hooks.
 
-Shared tool reference and reading patterns are in CLAUDE.md.
+**Shared conventions** (all Insaight skills):
+- Call `insaight:get_config()` once per session for the user's Notion pages
+  and company name/slug. If it reports `unconfigured: true`, ask the user to
+  edit the file at the returned path before saving to Notion.
+- Read cheaply: `list_accounts` → `list_posts` (slim index) → `get_posts` on
+  the few URNs worth reading (max 20 per call). `list_people` / `list_comments`
+  are free; the `scrape_*` tools call Apify and cost money — only scrape when
+  data is missing or stale.
+- Engagement benchmarks (adjust for the niche): < 10 likes low, 10–40 normal,
+  40+ high signal — read those in full.
 
 ---
 
@@ -21,7 +30,7 @@ Shared tool reference and reading patterns are in CLAUDE.md.
 ### Step 0 — Check Notion first (always)
 
 Before touching Apify or SQLite, check what you already know about this person
-in Notion. See CLAUDE.md → Notion Integration for locations.
+in Notion. Locations come from `insaight:get_config()`.
 
 **0a. Existing research page:**
 ```
@@ -141,7 +150,7 @@ From `education`, `certifications`, `languages`:
 #### 📝 Content Themes
 - What topics do they post about? (rank by frequency)
 - How often they post (weekly, monthly, sporadic)
-- Engagement level (low/normal/high per benchmarks in CLAUDE.md)
+- Engagement level (low/normal/high per shared benchmarks above)
 - Original content vs mostly reshares
 
 #### 🎯 Professional Focus

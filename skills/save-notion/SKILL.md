@@ -1,6 +1,6 @@
 ---
-name: insaight-save-notion
-description: "Persist an Insaight research brief to Notion under the configured NOTION_RESEARCH_PAGE (see CLAUDE.md → Notion Setup). Primarily invoked automatically by the research skills after they finish — the user rarely triggers this explicitly. Trigger phrases (rare): 'save to Notion', 'save this research', 'store in Notion', 'add to prospect research'. Requires the Notion MCP. Outreach messages are NEVER saved here — the user maintains the NOTION_OUTREACH_LOG page manually."
+name: save-notion
+description: "Persist an Insaight research brief to Notion under the configured NOTION_RESEARCH_PAGE (from get_config). Primarily invoked automatically by the research skills after they finish — the user rarely triggers this explicitly. Trigger phrases (rare): 'save to Notion', 'save this research', 'store in Notion', 'add to prospect research'. Requires the Notion MCP. Outreach messages are NEVER saved here — the user maintains the NOTION_OUTREACH_LOG page manually."
 ---
 
 # Insaight — Save Research to Notion
@@ -31,7 +31,7 @@ If nothing to save, stop and tell the user.
 notion:search(query="[NOTION_RESEARCH_PAGE]")
 ```
 
-If missing, search for `[NOTION_WORKSPACE]` (configured in CLAUDE.md → Notion Setup)
+If missing, search for `[NOTION_WORKSPACE]` (from `insaight:get_config()`)
 and create `[NOTION_RESEARCH_PAGE]` under it (only if the user confirms).
 Cache the parent page ID for the session.
 
