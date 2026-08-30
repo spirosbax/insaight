@@ -262,7 +262,7 @@ insaight-cli export --format csv --output posts.csv
 
 ```
 insaight/
-  mcp_server.py    — FastMCP server: 18 tools for Claude
+  mcp_server.py    — MCP server (mcp SDK 2.x): 18 tools for Claude
   db.py            — SQLite schema + CRUD (posts, people, comments, outreach)
   memory.py        — Learned style + playbook memory files
   paths.py         — Resolves INSAIGHT_HOME (~/.insaight by default)

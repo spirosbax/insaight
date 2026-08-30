@@ -34,7 +34,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from . import db, models, people as people_module, scraper, comments as comments_module
 from . import memory as memory_module, paths
 
@@ -43,7 +43,7 @@ from . import memory as memory_module, paths
 load_dotenv(paths.home() / ".env")
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-mcp = FastMCP("insaight")
+mcp = MCPServer("insaight")
 
 # After this many recorded outcomes, record_outcome() flags that a reflection
 # run is due (the insaight-reflect skill proposes memory updates with evidence).

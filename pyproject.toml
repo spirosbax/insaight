@@ -22,7 +22,7 @@ dependencies = [
   "click>=8.1",
   "python-dotenv>=1.0",
   "anthropic>=0.40",
-  "mcp[cli]>=1.0,<2",
+  "mcp[cli]>=2.0",
 ]
 
 [project.optional-dependencies]
