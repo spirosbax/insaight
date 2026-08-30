@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "insaight": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/spirosbax/insaight", "insaight"]
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "insaight",
+  "owner": { "name": "Spiros Baxevanakis", "url": "https://github.com/spirosbax" },
+  "plugins": [
+    {
+      "name": "insaight",
+      "source": "./",
+      "description": "LinkedIn prospect intelligence for Claude: research people and companies, draft personalized outreach, and learn what gets replies.",
+      "version": "0.1.0",
+      "homepage": "https://github.com/spirosbax/insaight",
+      "license": "MIT"
+    }
+  ]
+}

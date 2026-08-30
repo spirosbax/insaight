@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+
+# Data — DB and raw Apify dumps are local only
+data/
+
+# Claude Code — user-specific settings
+.claude/
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+
+# uv lockfile — this is a library, resolve fresh
+uv.lock
