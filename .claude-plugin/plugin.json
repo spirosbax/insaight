@@ -1,11 +1,21 @@
 {
   "name": "insaight",
   "version": "0.1.0",
-  "description": "LinkedIn prospect intelligence for Claude: research people and companies, draft personalized outreach, and learn what gets replies.",
-  "author": { "name": "Spiros Baxevanakis", "url": "https://github.com/spirosbax" },
+  "description": "LinkedIn prospect intelligence inside Claude. Automates the research behind outreach, not the sending: classifies what people and companies post about, mines comment threads for warm leads, surfaces uncommon commonalities, and learns which hooks earn replies. 18 MCP tools plus 8 skills, all local.",
+  "author": {
+    "name": "Spiros Baxevanakis",
+    "url": "https://github.com/spirosbax"
+  },
   "homepage": "https://github.com/spirosbax/insaight",
   "repository": "https://github.com/spirosbax/insaight",
   "license": "MIT",
-  "keywords": ["linkedin", "sales", "outreach", "prospecting", "mcp"],
+  "keywords": [
+    "linkedin",
+    "sales",
+    "outreach",
+    "prospecting",
+    "research",
+    "mcp"
+  ],
   "mcpServers": "./.mcp.json"
 }
