@@ -6,16 +6,9 @@
 [![Tests](https://github.com/spirosbax/insaight/actions/workflows/tests.yml/badge.svg)](https://github.com/spirosbax/insaight/actions/workflows/tests.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
 
-<p align="center"><img src="docs/demo.gif" width="560" alt="insaight: research a company, rank who to pitch, find the hook, draft the DM"></p>
+<p align="center"><img src="docs/demo.gif" width="560" alt="insaight: research a company, rank who to pitch, classify what they post about, find the hook"></p>
 
 Insaight scrapes public LinkedIn data via [Apify](https://apify.com), stores it in local SQLite, and hands it to Claude through an [MCP server](https://modelcontextprotocol.io/) and eight skills. Data flows in once, then stays on your machine — repeat questions hit SQLite, not Apify.
-
-```text
-"Research Anthropic"           → intelligence brief from company + exec posts, prospect score included
-"Draft outreach to their CEO"  → personalized DM + email, written in your learned voice
-"I sent it" ... "She replied!" → logged; after enough outcomes Insaight proposes evidence-backed
-                                 updates to its memory of your style and what gets replies
-```
 
 ## Architecture
 
