@@ -29,20 +29,28 @@ graph LR
 
 ## Install in 30 seconds
 
-In Claude Code:
+**Prerequisite:** [uv](https://docs.astral.sh/uv/) and Python 3.11+. The plugin runs the MCP server with `uvx`, so without uv the tools never load.
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh   # skip if you already have uv
+```
+
+Then, in Claude Code:
 
 ```
 /plugin marketplace add spirosbax/insaight
 /plugin install insaight@insaight
 ```
 
-Then add your [Apify](https://apify.com) token (free tier works):
+Add your [Apify](https://apify.com) token (free tier works):
 
 ```bash
 mkdir -p ~/.insaight && echo "APIFY_API_TOKEN=apify_api_..." >> ~/.insaight/.env
 ```
 
-Restart Claude Code and say *"research Anthropic on LinkedIn"*. The plugin registers the MCP server (run via `uvx` — [uv](https://docs.astral.sh/uv/) required) and installs all eight skills; there is nothing to clone.
+Restart Claude Code and say *"research Anthropic on LinkedIn"*. The plugin registers the MCP server and installs all eight skills; there is nothing to clone.
+
+> On the very first run, `uvx` builds the server before it answers — give it a few seconds. If the insaight tools never appear, check that `uv` is on your `PATH`.
 
 <details>
 <summary><b>Claude Desktop</b></summary>
