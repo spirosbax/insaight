@@ -1,6 +1,6 @@
 {
   "name": "insaight",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "LinkedIn prospect intelligence inside Claude. Automates the research behind outreach, not the sending: classifies what people and companies post about, mines comment threads for warm leads, surfaces uncommon commonalities, and learns which hooks earn replies. 18 MCP tools plus 8 skills, all local.",
   "author": {
     "name": "Spiros Baxevanakis",
