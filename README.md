@@ -55,7 +55,7 @@ Add to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claud
   "mcpServers": {
     "insaight": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/spirosbax/insaight", "insaight"],
+      "args": ["--from", "git+https://github.com/spirosbax/insaight@v0.2.0", "insaight"],
       "env": { "APIFY_API_TOKEN": "apify_api_..." }
     }
   }
