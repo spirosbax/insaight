@@ -151,6 +151,17 @@ class TestPersonModel:
         # headline already contains title — experience fallback only used when currentPosition bare
         assert p.headline is not None
 
+    def test_experience_fallback_with_string_end_date(self):
+        # Some actors give endDate as a plain string, not harvestapi's {"text": ...}
+        item = {
+            **SHORT_MODE_EMPLOYEE,
+            "experience": [
+                {"title": "Sales Manager", "companyName": "Acme Charging", "endDate": "Present"},
+            ],
+        }
+        p = Person.from_apify_result(item, COMPANY_URL)
+        assert json.loads(p.current_titles) == ["Sales Manager"]
+
     def test_no_name_person_does_not_crash(self):
         p = Person.from_apify_result(NO_NAME_PERSON, COMPANY_URL)
         assert p.profile_id == "ACoAAA999"
@@ -210,6 +221,16 @@ class TestPeopleDB:
         assert is_new is False
         row = conn.execute("SELECT headline FROM people WHERE profile_id='p001'").fetchone()
         assert row["headline"] == "New headline"
+
+    def test_upsert_matches_existing_row_by_linkedin_url(self):
+        # harvestapi keys people by ACoAA… id, automly by profile slug
+        conn = fresh_conn()
+        db.insert_person(conn, make_person("ACoAAA111", linkedin_url="https://www.linkedin.com/in/jane-doe"))
+        same_person = make_person("jane-doe", linkedin_url="https://www.linkedin.com/in/jane-doe/",
+                                  headline="New headline")
+        assert db.upsert_person(conn, same_person) is False
+        rows = conn.execute("SELECT profile_id, headline FROM people").fetchall()
+        assert [(r["profile_id"], r["headline"]) for r in rows] == [("ACoAAA111", "New headline")]
 
     def test_insert_people_counts(self):
         conn = fresh_conn()

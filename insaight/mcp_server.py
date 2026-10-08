@@ -441,16 +441,18 @@ def scrape_people(
     Args:
         url:        Full LinkedIn company URL.
                     Example: https://www.linkedin.com/company/acme-charging
-        job_titles: Optional list of job titles to filter by on LinkedIn.
+        job_titles: Optional list of job titles; only people whose LinkedIn headline
+                    shows one of them are kept.
                     Example: ["CEO", "Founder", "CTO", "Head of", "Director"]
                     Leave empty to scrape all visible employees (up to max_items).
         max_items:  Maximum number of profiles to fetch (default 50, max 200).
                     For leadership only, use 10–20 with specific job_titles.
-        full_mode:  If True, uses Full profile scraper mode ($8/1k) to also fetch
-                    about, experience, education, skills, certifications, languages,
-                    volunteer, projects, recommendations. Default False (Short mode,
-                    $4/1k) which returns only name, headline, location, current role.
-                    Use True when you need commonality-mining data for outreach.
+        full_mode:  If True ($2.50/1k instead of $1.50/1k), also opens each profile
+                    for about, education and job history — but LinkedIn shows those
+                    only on fully public profiles, so most people come back with
+                    search details only. For commonality-mining data on one person,
+                    use scrape_person_profile(). Default False: name, headline,
+                    location, current company.
     """
     max_items = min(max_items, 200)
 
@@ -465,16 +467,19 @@ def scrape_people(
             f"Add it to {paths.home() / '.env'} (or the env block of your MCP config) and restart the MCP server."
         )
 
+    status = ""
     try:
         items = scraper.scrape_people(
             api_token, url, job_titles or None, max_items, full_mode=full_mode
         )
+    except scraper.EmptyRun as e:
+        items, status = [], f" ({e})"
     except Exception as e:
         return f"Apify scrape failed: {e}"
 
     if not items:
         return (
-            f"No people returned for {url}. "
+            f"No people returned for {url}{status}. "
             "The company page may have no visible employees, or job_titles filter was too narrow."
         )
 

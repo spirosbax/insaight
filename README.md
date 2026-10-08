@@ -166,7 +166,7 @@ Everything is under `~/.insaight/` (override with `INSAIGHT_HOME`):
 | Actor | Scrapes | Approx. cost |
 |-------|---------|--------------|
 | `harvestapi/linkedin-profile-posts` | Company or personal posts | ~$1.50 / 1k posts |
-| `harvestapi/linkedin-company-employees` | Employees and leadership | ~$4 / 1k (Short), ~$8 / 1k (Full) |
+| `automly/linkedin-company-employees-scraper` | Employees and leadership | ~$1.50 / 1k (~$2.50 / 1k with full profiles) |
 | `harvestapi/linkedin-profile-scraper` | Single-profile enrichment | ~$4 / 1k (~$10 / 1k with email search) |
 | `harvestapi/linkedin-post-comments` | Comment threads | see actor page |
 

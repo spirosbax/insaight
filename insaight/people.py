@@ -1,6 +1,8 @@
 """
-Person model — normalises output from harvestapi/linkedin-company-employees
-(Short and Full modes) and harvestapi/linkedin-profile-scraper (full profile).
+Person model — normalises output from the company-employee scraper
+(automly/linkedin-company-employees-scraper, mapped to the harvestapi shape by
+scraper.scrape_people; harvestapi/linkedin-company-employees before it) and
+harvestapi/linkedin-profile-scraper (full profile).
 """
 
 import json
@@ -75,7 +77,9 @@ class Person:
         # Fallback: parse titles from experience if currentPosition is bare
         if not current_titles and item.get("experience"):
             for exp in item["experience"]:
-                if not exp.get("endDate") or exp.get("endDate", {}).get("text") == "Present":
+                end = exp.get("endDate")
+                # harvestapi nests it as {"text": "Present"}; other actors use a plain string
+                if not end or (end.get("text") if isinstance(end, dict) else end) == "Present":
                     title = exp.get("position") or exp.get("title")
                     if title:
                         current_titles.append(title)

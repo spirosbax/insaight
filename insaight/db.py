@@ -275,11 +275,20 @@ def upsert_person(conn, person) -> bool:
     only non-None fields on the incoming Person overwrite existing data.
     This lets a Short-mode refresh coexist with a prior Full-mode enrichment
     without blanking out experience/education/etc.
+    Falls back to matching on linkedin_url, because actors key people
+    differently (harvestapi: ACoAA… ids, automly: profile slugs) — the same
+    person from two actors updates one row, which keeps its first profile_id.
     Returns True if a new row was inserted, False if updated.
     """
     existing = conn.execute(
         "SELECT profile_id FROM people WHERE profile_id = ?", (person.profile_id,)
     ).fetchone()
+    if not existing and person.linkedin_url:
+        existing = conn.execute(
+            "SELECT profile_id FROM people "
+            "WHERE lower(rtrim(linkedin_url, '/')) = lower(rtrim(?, '/'))",
+            (person.linkedin_url,),
+        ).fetchone()
 
     if existing:
         updatable = [c for c in _PERSON_COLUMNS if c != "profile_id"]
@@ -292,7 +301,7 @@ def upsert_person(conn, person) -> bool:
             set_clauses.append(f"{col}=?")
             values.append(val)
         if set_clauses:
-            values.append(person.profile_id)
+            values.append(existing[0])
             conn.execute(
                 f"UPDATE people SET {', '.join(set_clauses)} WHERE profile_id=?",
                 values,

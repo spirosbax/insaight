@@ -3,26 +3,35 @@ from apify_client import ApifyClient
 # Post search (harvestapi/linkedin-post-search) needs searchQueries + authorUrls;
 # profile/company feeds use targetUrls on linkedin-profile-posts instead.
 ACTOR_ID = "harvestapi/linkedin-profile-posts"
-PEOPLE_ACTOR_ID = "harvestapi/linkedin-company-employees"
+# harvestapi/linkedin-company-employees caps free Apify plans at 10 runs in
+# total; automly's employee scraper runs on the free plan's monthly credit.
+PEOPLE_ACTOR_ID = "automly/linkedin-company-employees-scraper"
 PROFILE_ACTOR_ID = "harvestapi/linkedin-profile-scraper"
 POST_COMMENTS_ACTOR_ID = "harvestapi/linkedin-post-comments"
 
 # Profile scraper mode strings — Apify expects these exact labels.
-PEOPLE_MODE_SHORT = "Short ($4 per 1k)"
-PEOPLE_MODE_FULL = "Full ($8 per 1k)"
 PROFILE_MODE_DETAILS = "Profile details no email ($4 per 1k)"
 PROFILE_MODE_DETAILS_EMAIL = "Profile details + email search ($10 per 1k)"
+
+
+class EmptyRun(RuntimeError):
+    """
+    A run that succeeded with no items but said why in its status message.
+
+    For some actors that is a failure in disguise (harvestapi's free-plan cap:
+    "free user run limit exceeded"), for others a normal summary (automly:
+    "0 employees from 1/1 sources"), so callers choose how to word it.
+    """
 
 
 def _run_actor(client: ApifyClient, actor_id: str, run_input: dict) -> list[dict]:
     """
     Run an actor and return its dataset items.
 
-    An empty dataset is only returned as [] when the run succeeded cleanly.
-    If the run failed, or "succeeded" with a status message, raise instead —
-    harvestapi actors end SUCCEEDED with no items and the status message
-    "free user run limit exceeded" once a free Apify plan hits their run cap,
-    and [] would reach the user as "nothing found".
+    An empty dataset is only returned as [] when the run succeeded without a
+    status message. A failed run raises RuntimeError and a succeeded one with
+    a status message raises EmptyRun — [] would hide the actor's explanation
+    and reach the user as a bare "nothing found".
     """
     run = client.actor(actor_id).call(run_input=run_input)
     # apify-client >= 3.0 returns a typed Run model (or None if the run
@@ -31,9 +40,11 @@ def _run_actor(client: ApifyClient, actor_id: str, run_input: dict) -> list[dict
         raise RuntimeError(f"{actor_id} run failed to start (call() returned None)")
 
     items = list(client.dataset(run.default_dataset_id).iterate_items())
-    if not items and (run.status != "SUCCEEDED" or run.status_message):
+    if not items and run.status != "SUCCEEDED":
         detail = f": {run.status_message}" if run.status_message else ""
         raise RuntimeError(f"{actor_id} run {run.id} ended {run.status} with no items{detail}")
+    if not items and run.status_message:
+        raise EmptyRun(f"{actor_id} run {run.id}: {run.status_message}")
     return items
 
 
@@ -59,24 +70,30 @@ def scrape_people(
     """
     Scrape company employees from LinkedIn via Apify.
 
-    Short mode ($4/1k) returns: name, headline, location, current position.
-    Full mode ($8/1k) adds: about, experience[], education[], skills, certifications,
-    languages, volunteer, projects, recommendations, follower/connection counts.
+    Returns name, headline, location, current company and profile URL ($1.50/1k).
+    full_mode ($2.50/1k) also opens each profile for about, education and job
+    history, but LinkedIn shows those only on fully public profiles — most come
+    back with search details only. scrape_person_profile enriches one person fully.
 
-    Pass job_titles (e.g. ["CEO", "Founder", "CTO"]) to narrow results — otherwise
-    returns all visible employees up to max_items.
+    Pass job_titles (e.g. ["CEO", "Founder", "CTO"]) to keep only people whose
+    headline shows one of them — otherwise returns all visible employees up to max_items.
     """
     client = ApifyClient(api_token)
     run_input: dict = {
         "companies": [company_url],
-        "profileScraperMode": PEOPLE_MODE_FULL if full_mode else PEOPLE_MODE_SHORT,
-        "maxItems": max_items,
-        "companiesScrapingMode": "All at once",
+        "maxEmployeesPerCompany": max_items,
+        "fullProfiles": full_mode,
     }
     if job_titles:
         run_input["jobTitles"] = job_titles
 
-    return _run_actor(client, PEOPLE_ACTOR_ID, run_input)
+    items = _run_actor(client, PEOPLE_ACTOR_ID, run_input)
+    # Person.from_apify_result reads the employer from harvestapi's currentPosition
+    # list; automly has a flat currentCompany, and the title only in the headline.
+    for item in items:
+        if item.get("currentCompany") and not item.get("currentPosition"):
+            item["currentPosition"] = [{"companyName": item["currentCompany"]}]
+    return items
 
 
 def scrape_person_profile(
