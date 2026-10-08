@@ -222,6 +222,14 @@ class TestPeopleDB:
         row = conn.execute("SELECT headline FROM people WHERE profile_id='p001'").fetchone()
         assert row["headline"] == "New headline"
 
+    def test_get_people_ignores_trailing_slash_on_company_url(self):
+        # Tracked accounts can be stored as ".../company/x/" while scrape_people got ".../company/x"
+        conn = fresh_conn()
+        db.insert_person(conn, make_person("a", company_url=COMPANY_URL + "/"))
+        db.insert_person(conn, make_person("b", company_url=COMPANY_URL))
+        assert {r["profile_id"] for r in db.get_people(conn, COMPANY_URL + "/")} == {"a", "b"}
+        assert {r["profile_id"] for r in db.get_people(conn, COMPANY_URL, role_query="CEO")} == {"a", "b"}
+
     def test_upsert_matches_existing_row_by_linkedin_url(self):
         # harvestapi keys people by ACoAA… id, automly by profile slug
         conn = fresh_conn()

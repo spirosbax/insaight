@@ -324,18 +324,22 @@ def insert_people(conn, people) -> tuple[int, int]:
 
 
 def get_people(conn, company_url: str, role_query: str = "", limit: int = 50) -> list:
-    """Return people for a company, optionally filtered by role keyword in headline or titles."""
+    """Return people for a company, optionally filtered by role keyword in headline or titles.
+
+    company_url is matched ignoring a trailing slash: people are stored under
+    the URL scrape_people was given, which need not match the tracked account's.
+    """
     if role_query:
         rows = conn.execute(
             """SELECT * FROM people
-               WHERE company_url = ?
+               WHERE rtrim(company_url, '/') = rtrim(?, '/')
                AND (headline LIKE ? OR current_titles LIKE ? OR name LIKE ?)
                ORDER BY name ASC LIMIT ?""",
             (company_url, f"%{role_query}%", f"%{role_query}%", f"%{role_query}%", limit),
         ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT * FROM people WHERE company_url = ? ORDER BY name ASC LIMIT ?",
+            "SELECT * FROM people WHERE rtrim(company_url, '/') = rtrim(?, '/') ORDER BY name ASC LIMIT ?",
             (company_url, limit),
         ).fetchall()
     return rows
