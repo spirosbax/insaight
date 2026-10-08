@@ -14,12 +14,27 @@ PROFILE_MODE_DETAILS = "Profile details no email ($4 per 1k)"
 PROFILE_MODE_DETAILS_EMAIL = "Profile details + email search ($10 per 1k)"
 
 
-def _dataset_id(run) -> str:
+def _run_actor(client: ApifyClient, actor_id: str, run_input: dict) -> list[dict]:
+    """
+    Run an actor and return its dataset items.
+
+    An empty dataset is only returned as [] when the run succeeded cleanly.
+    If the run failed, or "succeeded" with a status message, raise instead —
+    harvestapi actors end SUCCEEDED with no items and the status message
+    "free user run limit exceeded" once a free Apify plan hits their run cap,
+    and [] would reach the user as "nothing found".
+    """
+    run = client.actor(actor_id).call(run_input=run_input)
     # apify-client >= 3.0 returns a typed Run model (or None if the run
     # failed to start) instead of the old dict.
     if run is None:
-        raise RuntimeError("Apify actor run failed to start (call() returned None)")
-    return run.default_dataset_id
+        raise RuntimeError(f"{actor_id} run failed to start (call() returned None)")
+
+    items = list(client.dataset(run.default_dataset_id).iterate_items())
+    if not items and (run.status != "SUCCEEDED" or run.status_message):
+        detail = f": {run.status_message}" if run.status_message else ""
+        raise RuntimeError(f"{actor_id} run {run.id} ended {run.status} with no items{detail}")
+    return items
 
 
 def scrape_account(api_token: str, profile_url: str, max_posts: int = 50) -> list[dict]:
@@ -31,9 +46,7 @@ def scrape_account(api_token: str, profile_url: str, max_posts: int = 50) -> lis
         "maxPosts": max_posts,
     }
 
-    run = client.actor(ACTOR_ID).call(run_input=run_input)
-    items = list(client.dataset(_dataset_id(run)).iterate_items())
-    return items
+    return _run_actor(client, ACTOR_ID, run_input)
 
 
 def scrape_people(
@@ -63,8 +76,7 @@ def scrape_people(
     if job_titles:
         run_input["jobTitles"] = job_titles
 
-    run = client.actor(PEOPLE_ACTOR_ID).call(run_input=run_input)
-    return list(client.dataset(_dataset_id(run)).iterate_items())
+    return _run_actor(client, PEOPLE_ACTOR_ID, run_input)
 
 
 def scrape_person_profile(
@@ -87,8 +99,7 @@ def scrape_person_profile(
         "queries": [profile_url],
         "profileScraperMode": PROFILE_MODE_DETAILS_EMAIL if with_email else PROFILE_MODE_DETAILS,
     }
-    run = client.actor(PROFILE_ACTOR_ID).call(run_input=run_input)
-    items = list(client.dataset(_dataset_id(run)).iterate_items())
+    items = _run_actor(client, PROFILE_ACTOR_ID, run_input)
     return items[0] if items else None
 
 
@@ -115,8 +126,7 @@ def scrape_post_comments(
         "postedLimit": posted_limit,
         "profileScraperMode": profile_mode,
     }
-    run = client.actor(POST_COMMENTS_ACTOR_ID).call(run_input=run_input)
-    return list(client.dataset(_dataset_id(run)).iterate_items())
+    return _run_actor(client, POST_COMMENTS_ACTOR_ID, run_input)
 
 
 def scrape_accounts(api_token: str, profile_urls: list[str], max_posts: int = 50, verbose: bool = False) -> dict[str, list[dict]]:
